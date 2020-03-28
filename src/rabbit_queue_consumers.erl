@@ -16,7 +16,7 @@
 
 -module(rabbit_queue_consumers).
 
--export([new/0, max_active_priority/1, inactive/1, all/1, count/0,
+-export([new/0, set_order/2, max_active_priority/1, inactive/1, all/1, count/0,
          unacknowledged_message_count/0, add/10, remove/3, erase_ch/2,
          send_drained/0, deliver/3, record_ack/3, subtract_acks/3,
          possibly_unblock/3,
@@ -30,7 +30,7 @@
 %% Utilisation average calculations are all in μs.
 -define(USE_AVG_HALF_LIFE, 1000000.0).
 
--record(state, {consumers, use}).
+-record(state, {consumers, use, route_key_state}).
 
 -record(consumer, {tag, ack_required, prefetch, args, user}).
 
@@ -47,6 +47,14 @@
              %% Internal flow control for queue -> writer
              unsent_message_count}).
 
+-record(route_key_state, {route_key_consumers, ack_route_keys, order}).
+
+-record(route_key_consumer, {q_entry, msg_count}).
+
+-record(ack_route_key, {q_entry, route_key}).
+
+-record(message, {routing_keys, id}).
+
 %%----------------------------------------------------------------------------
 
 -type time_micros() :: non_neg_integer().
@@ -61,6 +69,7 @@
 -type fetch_result() :: {rabbit_types:basic_message(), boolean(), ack()}.
 
 -spec new() -> state().
+-spec set_order(integer(), state()) -> state().
 -spec max_active_priority(state()) -> integer() | 'infinity' | 'empty'.
 -spec inactive(state()) -> boolean().
 -spec all(state()) -> [{ch(), rabbit_types:ctag(), boolean(),
@@ -99,7 +108,15 @@
 new() -> #state{consumers = priority_queue:new(),
                 use       = {active,
                              erlang:monotonic_time(micro_seconds),
-                             1.0}}.
+                             1.0},
+                route_key_state = #route_key_state{route_key_consumers = maps:new(),
+                                                        ack_route_keys = maps:new(), order = 0}
+                }.
+
+set_order(Order, State = #state{route_key_state = RouteKeyState}) ->
+    RouteKeyState1 = RouteKeyState#route_key_state{order = Order},
+    State1 = State#state{route_key_state = RouteKeyState1},
+    remove_all_route_key_consumer(State1).
 
 max_active_priority(#state{consumers = Consumers}) ->
     priority_queue:highest(Consumers).
@@ -149,7 +166,7 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers),
                 use       = update_use(CUInfo, active)}.
 
-remove(ChPid, CTag, State = #state{consumers = Consumers}) ->
+remove(ChPid, CTag, State = #state{consumers = Consumers, route_key_state = RouteKeyState}) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
@@ -165,11 +182,11 @@ remove(ChPid, CTag, State = #state{consumers = Consumers}) ->
             update_ch_record(C#cr{consumer_count    = Count - 1,
                                   limiter           = Limiter2,
                                   blocked_consumers = Blocked1}),
-            State#state{consumers =
-                            remove_consumer(ChPid, CTag, Consumers)}
+            State#state{consumers = remove_consumer(ChPid, CTag, Consumers),
+                    route_key_state = remove_route_key_consumer(ChPid, CTag, RouteKeyState)}
     end.
 
-erase_ch(ChPid, State = #state{consumers = Consumers}) ->
+erase_ch(ChPid, State = #state{consumers = Consumers, route_key_state = RouteKeyState}) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
@@ -181,7 +198,8 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
             Filtered = priority_queue:filter(chan_pred(ChPid, true), All),
             {[AckTag || {AckTag, _CTag} <- queue:to_list(ChAckTags)],
              tags(priority_queue:to_list(Filtered)),
-             State#state{consumers = remove_consumers(ChPid, Consumers)}}
+             State#state{consumers = remove_consumers(ChPid, Consumers)
+                    , route_key_state = remove_route_key_consumers(ChPid, RouteKeyState)}}
     end.
 
 send_drained() -> [update_ch_record(send_drained(C)) || C <- all_ch_record()],
@@ -196,10 +214,10 @@ deliver(FetchFun, QName, ConsumersChanged,
             {undelivered, ConsumersChanged,
              State#state{use = update_use(State#state.use, inactive)}};
         {{value, QEntry, Priority}, Tail} ->
-            case deliver_to_consumer(FetchFun, QEntry, QName) of
-                {delivered, R} ->
+            case deliver_to_consumer(FetchFun, QEntry, QName, State) of
+                {delivered, R, State1} ->
                     {delivered, ConsumersChanged, R,
-                     State#state{consumers = priority_queue:in(QEntry, Priority,
+                     State1#state{consumers = priority_queue:in(QEntry, Priority,
                                                                Tail)}};
                 undelivered ->
                     deliver(FetchFun, QName, true,
@@ -207,52 +225,102 @@ deliver(FetchFun, QName, ConsumersChanged,
             end
     end.
 
-deliver_to_consumer(FetchFun, E = {ChPid, Consumer}, QName) ->
+deliver_to_consumer(FetchFun, QEntry = {ChPid, Consumer}, QName, State) ->
     C = lookup_ch(ChPid),
     case is_ch_blocked(C) of
-        true  -> block_consumer(C, E),
+        true  -> block_consumer(C, QEntry),
                  undelivered;
         false -> case rabbit_limiter:can_send(C#cr.limiter,
                                               Consumer#consumer.ack_required,
                                               Consumer#consumer.tag) of
                      {suspend, Limiter} ->
-                         block_consumer(C#cr{limiter = Limiter}, E),
+                         block_consumer(C#cr{limiter = Limiter}, QEntry),
                          undelivered;
                      {continue, Limiter} ->
-                         {delivered, deliver_to_consumer(
-                                       FetchFun, Consumer,
-                                       C#cr{limiter = Limiter}, QName)}
+                         {R, State1} = deliver_to_consumer(FetchFun, Consumer,
+                                                            C#cr{limiter = Limiter}, QEntry, QName, State),
+                         {delivered, R, State1}
                  end
     end.
 
 deliver_to_consumer(FetchFun,
-                    #consumer{tag          = CTag,
-                              ack_required = AckRequired},
-                    C = #cr{ch_pid               = ChPid,
-                            acktags              = ChAckTags,
-                            unsent_message_count = Count},
-                    QName) ->
-    {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
+                    Consumer = #consumer{ack_required = AckRequired},
+                    C, QEntry, QName,
+                    State=#state{route_key_state = #route_key_state{order = Order}}) ->
+    {{Message = #message{routing_keys = Routekeys}, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
+    [RouteKey | _] = Routekeys,
+
+    if
+        Order == 1 ->
+            State1 = deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
+                Consumer, C,
+                RouteKey, QEntry, QName, State);
+        true ->
+            deliver_message_to_consumer(Message, IsDelivered, AckTag,
+                Consumer, C, QName),
+            State1 = State
+    end,
+    {R, State1}.
+
+deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
+                                    Consumer, C,
+                                    RouteKey, QEntry, QName, State=#state{route_key_state = RouteKeyState}) ->
+    case find_route_key_consumer(RouteKey, RouteKeyState) of
+        {ok, #route_key_consumer{q_entry = QEntry1, msg_count = MsgCount}} ->
+            if
+                MsgCount < 50 ->
+                    {ChPid1, Consumer1} = QEntry1,
+                    C1 = lookup_ch(ChPid1),
+                    deliver_message_to_consumer(Message, IsDelivered, AckTag,
+                        Consumer1, C1, QName),
+                    RouteKeyConsumer1 = #route_key_consumer{q_entry = QEntry1, msg_count = MsgCount + 1};
+                true ->
+                    deliver_message_to_consumer(Message, IsDelivered, AckTag,
+                        Consumer, C, QName),
+                    RouteKeyConsumer1 = #route_key_consumer{q_entry = QEntry, msg_count = 1}
+            end;
+        _ ->
+            deliver_message_to_consumer(Message, IsDelivered, AckTag,
+                Consumer, C, QName),
+            RouteKeyConsumer1 = #route_key_consumer{q_entry = QEntry, msg_count = 1}
+    end,
+    RouteKeyState1 = add_route_key_consumer(RouteKey, RouteKeyConsumer1, AckTag, RouteKeyState1),
+    State#state{route_key_state = RouteKeyState1}.
+
+deliver_message_to_consumer(Message, IsDelivered, AckTag,
+                            #consumer{tag           = CTag,
+                                       ack_required  = AckRequired},
+                            C = #cr{ch_pid                = ChPid,
+                                    acktags               = ChAckTags,
+                                    unsent_message_count  = Count},
+                            QName) ->
+
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
-                           {QName, self(), AckTag, IsDelivered, Message}),
+                          {QName, self(), AckTag, IsDelivered, Message}),
     ChAckTags1 = case AckRequired of
-                     true  -> queue:in({AckTag, CTag}, ChAckTags);
-                     false -> ChAckTags
+                      true  -> queue:in({AckTag, CTag}, ChAckTags);
+                      false -> ChAckTags
                  end,
     update_ch_record(C#cr{acktags              = ChAckTags1,
-                          unsent_message_count = Count + 1}),
-    R.
+                          unsent_message_count = Count + 1}).
 
 record_ack(ChPid, LimiterPid, AckTag) ->
     C = #cr{acktags = ChAckTags} = ch_record(ChPid, LimiterPid),
     update_ch_record(C#cr{acktags = queue:in({AckTag, none}, ChAckTags)}),
     ok.
 
-subtract_acks(ChPid, AckTags, State) ->
+subtract_acks(ChPid, AckTags, State=#state{route_key_state = #route_key_state{order = Order}}) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
+
+            %%判断Order开关
+            if
+                Order == 1 -> State1 = remove_route_key_acks(AckTags, State);
+                true -> State1 = State
+            end,
+
             {CTagCounts, AckTags2} = subtract_acks(
                                        AckTags, [], maps:new(), ChAckTags),
             {Unblocked, Lim2} =
@@ -264,9 +332,12 @@ subtract_acks(ChPid, AckTags, State) ->
                   end, {false, Lim}, CTagCounts),
             C2 = C#cr{acktags = AckTags2, limiter = Lim2},
             case Unblocked of
-                true  -> unblock(C2, State);
+                true  -> case unblock(C2, State1) of
+                             unchanged -> {unchaned, State1};
+                             {unblocked, State2} -> {unblocked, State2}
+                         end;
                 false -> update_ch_record(C2),
-                         unchanged
+                    {unchanged, State1}
             end
     end.
 
@@ -447,6 +518,75 @@ remove_consumer(ChPid, CTag, Queue) ->
 
 remove_consumers(ChPid, Queue) ->
     priority_queue:filter(chan_pred(ChPid, false), Queue).
+
+add_route_key_consumer(RouteKey, RouteKeyConsumer=#route_key_consumer{q_entry = QEntry}, AckTag,
+        State = #route_key_state{route_key_consumers = RouteKeyConsumers, ack_route_keys = AckRouteKeys}) ->
+    State1 = State#route_key_state{route_key_consumers = maps:put(RouteKey, RouteKeyConsumer, RouteKeyConsumers)},
+    State1#route_key_state{ack_route_keys = maps:put(AckTag, #ack_route_key{q_entry = QEntry, route_key = RouteKey}
+                                                        , AckRouteKeys)}.
+
+find_route_key_consumer(RouteKey, State = #route_key_state{route_key_consumers = RouteKeyConsumers}) ->
+    maps:find(RouteKey, RouteKeyConsumers).
+
+remove_route_key_ack(AckTag,
+        State = #route_key_state{route_key_consumers = RouteKeyConsumers, ack_route_keys = AckRouteKeys}) ->
+    case maps:find(AckTag, AckRouteKeys) of
+        {ok, #ack_route_key{route_key = RouteKey}} ->
+            case maps:find(RouteKey, RouteKeyConsumers) of
+                {ok, RouteKeyConsumer = #route_key_consumer{msg_count = MsgCount}} ->
+                    MsgCount1 = MsgCount - 1,
+                    if
+                        MsgCount1 == 0 ->
+                            State1 = State#route_key_state{route_key_consumers = maps:remove(RouteKey, RouteKeyConsumers)};
+                        true ->
+                            State1 = State#route_key_state{route_key_consumers = maps:put(RouteKey,
+                                                RouteKeyConsumer#route_key_consumer{msg_count = MsgCount1})}
+                    end;
+                _ ->
+                    State1 = State
+            end,
+            State1#route_key_state{ack_route_keys = maps:remove(AckTag, AckRouteKeys)};
+        _ ->
+            State
+    end.
+
+
+remove_route_key_acks([], State) ->
+    State;
+remove_route_key_acks([T | TL], State) ->
+    State1 = remove_route_key_ack(T, State),
+    remove_route_key_acks(TL, State1).
+
+remove_route_key_consumer(ChPid, CTag,
+        State = #route_key_state{route_key_consumers = RouteKeyConsumers, ack_route_keys = AckRouteKeys}) ->
+    RouteKeyConsumers1 = maps:filter(fun (_, #route_key_consumer{q_entry = {ChPid1, #consumer{tag = CTag1}}}) ->
+                                        (ChPid1 /= ChPid) or (CTag1 /= CTag)
+                                     end, RouteKeyConsumers),
+    AckRouteKeys1 = maps:filter(fun (_, #ack_route_key{q_entry = {ChPid1, #consumer{tag = CTag1}}}) ->
+                                    (ChPid1 /= ChPid) or (CTag1 /= CTag)
+                                end, AckRouteKeys),
+    State#route_key_state{route_key_consumers = RouteKeyConsumers1, ack_route_keys = AckRouteKeys1}.
+
+remove_route_key_consumers(ChPid,
+        State = #route_key_state{route_key_consumers = RouteKeyConsumers, ack_route_keys = AckRouteKeys}) ->
+    RouteKeyConsumers1 = maps:filter(fun (_, #route_key_consumer{q_entry = {ChPid1, _}}) ->
+                                        (ChPid1 /= ChPid)
+                                     end, RouteKeyConsumers),
+    AckRouteKeys1 = maps:filter(fun (_, #ack_route_key{q_entry = {ChPid1, _}}) ->
+                                    (ChPid1 /= ChPid)
+                                end, AckRouteKeys),
+    State#route_key_state{route_key_consumers = RouteKeyConsumers1, ack_route_keys = AckRouteKeys1}.
+
+remove_all_route_key_consumer(State = #route_key_state{route_key_consumers = RouteKeyConsumers,
+                                                        ack_route_keys = AckRouteKeys}) ->
+    RouteKeyConsumers1 = maps:filter(fun (_, _) ->
+                                        false
+                                     end, RouteKeyConsumers),
+    AckRouteKeys1 = maps:filter(fun (_, _) ->
+                                    false
+                                end, AckRouteKeys),
+    State#route_key_state{route_key_consumers = RouteKeyConsumers1, ack_route_keys = AckRouteKeys1}.
+
 
 chan_pred(ChPid, Want) ->
     fun ({CP, _Consumer}) when CP =:= ChPid -> Want;

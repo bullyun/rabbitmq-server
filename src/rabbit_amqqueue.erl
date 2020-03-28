@@ -608,7 +608,8 @@ declare_args() ->
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
      {<<"x-max-priority">>,            fun check_max_priority_arg/2},
      {<<"x-overflow">>,                fun check_overflow/2},
-     {<<"x-queue-mode">>,              fun check_queue_mode/2}].
+     {<<"x-queue-mode">>,              fun check_queue_mode/2},
+     {<<"x-order">>,              fun check_non_neg_int_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
