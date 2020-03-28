@@ -16,6 +16,8 @@
 
 -module(rabbit_queue_consumers).
 
+-include("rabbit.hrl").
+
 -export([new/0, set_order/2, max_active_priority/1, inactive/1, all/1, count/0,
          unacknowledged_message_count/0, add/10, remove/3, erase_ch/2,
          send_drained/0, deliver/3, record_ack/3, subtract_acks/3,
@@ -53,7 +55,7 @@
 
 -record(ack_route_key, {q_entry, route_key}).
 
--record(message, {routing_keys, id}).
+%%-record(message, {routing_keys, id}).
 
 %%----------------------------------------------------------------------------
 
@@ -250,7 +252,10 @@ deliver_to_consumer(FetchFun,
                     Consumer = #consumer{ack_required = AckRequired},
                     C, QEntry, QName,
                     State=#state{route_key_state = #route_key_state{order = Order}}) ->
-    {{Message = #message{routing_keys = Routekeys}, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
+
+    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer-1('~b')", [Order]),
+
+    {{Message = #basic_message{routing_keys = Routekeys}, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
     [RouteKey | _] = Routekeys,
 
     rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer('~b')", [Order]),
