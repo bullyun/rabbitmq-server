@@ -105,7 +105,9 @@
 
 %%----------------------------------------------------------------------------
 
-new() -> #state{consumers = priority_queue:new(),
+new() ->
+    rabbit_log:info("rabbit_queue_consumers:new()~n"),
+    #state{consumers = priority_queue:new(),
                 use       = {active,
                              erlang:monotonic_time(micro_seconds),
                              1.0},
@@ -114,6 +116,7 @@ new() -> #state{consumers = priority_queue:new(),
                 }.
 
 set_order(Order, State = #state{route_key_state = RouteKeyState}) ->
+    rabbit_log:info("rabbit_queue_consumers:set_order('~b')~n", [Order]),
     RouteKeyState1 = RouteKeyState#route_key_state{order = Order},
     State1 = State#state{route_key_state = RouteKeyState1},
     remove_all_route_key_consumer(State1).
