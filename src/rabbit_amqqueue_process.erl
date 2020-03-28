@@ -440,6 +440,7 @@ init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
 init_dlx_rkey(RoutingKey, State) -> State#q{dlx_routing_key = RoutingKey}.
 
 init_max_length(MaxLen, State) ->
+    rabbit_log:info("init_max_length(~b)", MaxLen),
     {_Dropped, State1} = maybe_drop_head(State#q{max_length = MaxLen}),
     State1.
 
