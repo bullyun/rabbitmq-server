@@ -250,22 +250,22 @@ deliver_to_consumer(FetchFun,
     {{Message = #message{routing_keys = Routekeys}, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
     [RouteKey | _] = Routekeys,
 
-    if
+    State1 = if
         Order == 1 ->
-            State1 = deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
+            deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                 Consumer, C,
                 RouteKey, QEntry, QName, State);
         true ->
             deliver_message_to_consumer(Message, IsDelivered, AckTag,
                 Consumer, C, QName),
-            State1 = State
+            State
     end,
     {R, State1}.
 
 deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                                     Consumer, C,
                                     RouteKey, QEntry, QName, State=#state{route_key_state = RouteKeyState}) ->
-    case find_route_key_consumer(RouteKey, RouteKeyState) of
+    RouteKeyConsumer1 = case find_route_key_consumer(RouteKey, RouteKeyState) of
         {ok, #route_key_consumer{q_entry = QEntry1, msg_count = MsgCount}} ->
             if
                 MsgCount < 50 ->
@@ -273,18 +273,18 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                     C1 = lookup_ch(ChPid1),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer1, C1, QName),
-                    RouteKeyConsumer1 = #route_key_consumer{q_entry = QEntry1, msg_count = MsgCount + 1};
+                    #route_key_consumer{q_entry = QEntry1, msg_count = MsgCount + 1};
                 true ->
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer, C, QName),
-                    RouteKeyConsumer1 = #route_key_consumer{q_entry = QEntry, msg_count = 1}
+                    #route_key_consumer{q_entry = QEntry, msg_count = 1}
             end;
         _ ->
             deliver_message_to_consumer(Message, IsDelivered, AckTag,
                 Consumer, C, QName),
-            RouteKeyConsumer1 = #route_key_consumer{q_entry = QEntry, msg_count = 1}
+            #route_key_consumer{q_entry = QEntry, msg_count = 1}
     end,
-    RouteKeyState1 = add_route_key_consumer(RouteKey, RouteKeyConsumer1, AckTag, RouteKeyState1),
+    RouteKeyState1 = add_route_key_consumer(RouteKey, RouteKeyConsumer1, AckTag, RouteKeyState),
     State#state{route_key_state = RouteKeyState1}.
 
 deliver_message_to_consumer(Message, IsDelivered, AckTag,
@@ -316,9 +316,9 @@ subtract_acks(ChPid, AckTags, State=#state{route_key_state = #route_key_state{or
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
 
             %%判断Order开关
-            if
-                Order == 1 -> State1 = remove_route_key_acks(AckTags, State);
-                true -> State1 = State
+            State1 = if
+                Order == 1 -> remove_route_key_acks(AckTags, State);
+                true -> State
             end,
 
             {CTagCounts, AckTags2} = subtract_acks(
@@ -525,29 +525,27 @@ add_route_key_consumer(RouteKey, RouteKeyConsumer=#route_key_consumer{q_entry = 
     State1#route_key_state{ack_route_keys = maps:put(AckTag, #ack_route_key{q_entry = QEntry, route_key = RouteKey}
                                                         , AckRouteKeys)}.
 
-find_route_key_consumer(RouteKey, State = #route_key_state{route_key_consumers = RouteKeyConsumers}) ->
+find_route_key_consumer(RouteKey, #route_key_state{route_key_consumers = RouteKeyConsumers}) ->
     maps:find(RouteKey, RouteKeyConsumers).
 
 remove_route_key_ack(AckTag,
         State = #route_key_state{route_key_consumers = RouteKeyConsumers, ack_route_keys = AckRouteKeys}) ->
     case maps:find(AckTag, AckRouteKeys) of
         {ok, #ack_route_key{route_key = RouteKey}} ->
-            case maps:find(RouteKey, RouteKeyConsumers) of
+            State1 = case maps:find(RouteKey, RouteKeyConsumers) of
                 {ok, RouteKeyConsumer = #route_key_consumer{msg_count = MsgCount}} ->
                     MsgCount1 = MsgCount - 1,
                     if
                         MsgCount1 == 0 ->
-                            State1 = State#route_key_state{route_key_consumers = maps:remove(RouteKey, RouteKeyConsumers)};
+                            State#route_key_state{route_key_consumers = maps:remove(RouteKey, RouteKeyConsumers)};
                         true ->
-                            State1 = State#route_key_state{route_key_consumers = maps:put(RouteKey,
+                            State#route_key_state{route_key_consumers = maps:put(RouteKey,
                                                 RouteKeyConsumer#route_key_consumer{msg_count = MsgCount1})}
                     end;
-                _ ->
-                    State1 = State
+                _ -> State
             end,
             State1#route_key_state{ack_route_keys = maps:remove(AckTag, AckRouteKeys)};
-        _ ->
-            State
+        _ -> State
     end.
 
 
