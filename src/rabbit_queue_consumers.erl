@@ -120,8 +120,8 @@ new() ->
 set_order(Order, State = #state{route_key_state = RouteKeyState}) ->
     rabbit_log:info("rabbit_queue_consumers:set_order(~b)", [Order]),
     RouteKeyState1 = RouteKeyState#route_key_state{order = Order},
-    State1 = State#state{route_key_state = RouteKeyState1},
-    remove_all_route_key_consumer(State1).
+    RouteKeyState2 = remove_all_route_key_consumers(RouteKeyState),
+    State#state{route_key_state = RouteKeyState2}.
 
 max_active_priority(#state{consumers = Consumers}) ->
     priority_queue:highest(Consumers).
@@ -321,7 +321,7 @@ record_ack(ChPid, LimiterPid, AckTag) ->
     update_ch_record(C#cr{acktags = queue:in({AckTag, none}, ChAckTags)}),
     ok.
 
-subtract_acks(ChPid, AckTags, State=#state{route_key_state = #route_key_state{order = Order}}) ->
+subtract_acks(ChPid, AckTags, State=#state{route_key_state = RouteKeyState#route_key_state{order = Order}}) ->
     case lookup_ch(ChPid) of
         not_found ->
             not_found;
@@ -329,7 +329,7 @@ subtract_acks(ChPid, AckTags, State=#state{route_key_state = #route_key_state{or
 
             %%判断Order开关
             State1 = if
-                Order == 1 -> remove_route_key_acks(AckTags, State);
+                Order == 1 -> State#state{route_key_state = remove_route_key_acks(AckTags, RouteKeyState)};
                 true -> State
             end,
 
@@ -587,7 +587,7 @@ remove_route_key_consumers(ChPid,
                                 end, AckRouteKeys),
     State#route_key_state{route_key_consumers = RouteKeyConsumers1, ack_route_keys = AckRouteKeys1}.
 
-remove_all_route_key_consumer(State = #route_key_state{route_key_consumers = RouteKeyConsumers,
+remove_all_route_key_consumers(State = #route_key_state{route_key_consumers = RouteKeyConsumers,
                                                         ack_route_keys = AckRouteKeys}) ->
     RouteKeyConsumers1 = maps:filter(fun (_, _) ->
                                         false
