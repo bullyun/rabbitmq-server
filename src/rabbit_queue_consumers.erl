@@ -118,7 +118,7 @@ new() ->
                 }.
 
 set_order(Order, State = #state{route_key_state = RouteKeyState}) ->
-    rabbit_log:info("rabbit_queue_consumers:set_order('~b')", [Order]),
+    rabbit_log:info("rabbit_queue_consumers:set_order(~b)", [Order]),
     RouteKeyState1 = RouteKeyState#route_key_state{order = Order},
     State1 = State#state{route_key_state = RouteKeyState1},
     remove_all_route_key_consumer(State1).
@@ -258,7 +258,7 @@ deliver_to_consumer(FetchFun,
     {{Message = #basic_message{routing_keys = Routekeys}, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
     [RouteKey | _] = Routekeys,
 
-    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer('~b')", [Order]),
+    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(RouteKey=~s)", [RouteKey]),
 
     State1 = if
         Order == 1 ->
