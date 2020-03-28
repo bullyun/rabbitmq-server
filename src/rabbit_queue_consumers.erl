@@ -106,7 +106,7 @@
 %%----------------------------------------------------------------------------
 
 new() ->
-    rabbit_log:info("rabbit_queue_consumers:new()~n"),
+    rabbit_log:info("rabbit_queue_consumers:new()"),
     #state{consumers = priority_queue:new(),
                 use       = {active,
                              erlang:monotonic_time(micro_seconds),
@@ -116,7 +116,7 @@ new() ->
                 }.
 
 set_order(Order, State = #state{route_key_state = RouteKeyState}) ->
-    rabbit_log:info("rabbit_queue_consumers:set_order('~b')~n", [Order]),
+    rabbit_log:info("rabbit_queue_consumers:set_order('~b')", [Order]),
     RouteKeyState1 = RouteKeyState#route_key_state{order = Order},
     State1 = State#state{route_key_state = RouteKeyState1},
     remove_all_route_key_consumer(State1).
@@ -253,12 +253,16 @@ deliver_to_consumer(FetchFun,
     {{Message = #message{routing_keys = Routekeys}, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
     [RouteKey | _] = Routekeys,
 
+    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer('~b')", [Order]),
+
     State1 = if
         Order == 1 ->
+            rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer2"),
             deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                 Consumer, C,
                 RouteKey, QEntry, QName, State);
         true ->
+            rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer3"),
             deliver_message_to_consumer(Message, IsDelivered, AckTag,
                 Consumer, C, QName),
             State
