@@ -576,6 +576,8 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
 
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                         RequiredArgs) ->
+    rabbit_log:info(Args),
+    rabbit_log:info(RequiredArgs),
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
                                         [Key || {Key, _Fun} <- declare_args()]).
 
