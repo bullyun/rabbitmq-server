@@ -242,7 +242,7 @@ deliver_to_consumer(FetchFun, QEntry = {ChPid, Consumer}, QName, State) ->
                  end
     end.
 
-get_headers(Message = #basic_message{content = Content}) ->
+get_headers(#basic_message{content = Content}) ->
     case (Content#content.properties)#'P_basic'.headers of
         undefined -> [];
         H         -> H
