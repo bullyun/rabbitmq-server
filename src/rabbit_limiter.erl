@@ -366,10 +366,14 @@ handle_call(get_prefetch_limit, _From,
     {reply, PrefetchCount, State};
 
 handle_call({can_send, QPid, AckRequired}, _From,
-            State = #lim{volume = Volume}) ->
+            State = #lim{volume = Volume, prefetch_count = PrefetchCount}) ->
     case prefetch_limit_reached(State) of
-        true  -> {reply, false, limit_queue(QPid, State)};
-        false -> {reply, true,  State#lim{volume = if AckRequired -> Volume + 1;
+        true  ->
+            rabbit_log:info("rabbit_limiter:handle_call(can_send) Volume=~b PrefetchCount=~b", [Volume, PrefetchCount]),
+            {reply, false, limit_queue(QPid, State)};
+        false ->
+            rabbit_log:info("rabbit_limiter:handle_call(can_send)2 Volume=~b PrefetchCount=~b", [Volume, PrefetchCount]),
+            {reply, true,  State#lim{volume = if AckRequired -> Volume + 1;
                                                       true        -> Volume
                                                    end}}
     end.
