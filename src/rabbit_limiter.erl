@@ -129,7 +129,7 @@
          get_prefetch_limit/1, ack/2, pid/1]).
 %% queue API
 -export([client/1, activate/1, can_send/3, resume/1, deactivate/1,
-         is_suspended/1, is_consumer_blocked/2, credit/5, ack_from_queue/3,
+         is_suspended/1, is_consumer_blocked/2, get_credit/2, credit/5, ack_from_queue/3,
          drained/1, forget_consumer/2]).
 %% callbacks
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
@@ -167,6 +167,7 @@
 -spec deactivate(qstate()) -> qstate().
 -spec is_suspended(qstate()) -> boolean().
 -spec is_consumer_blocked(qstate(), rabbit_types:ctag()) -> boolean().
+-spec get_credit(qstate(), rabbit_types:ctag()) -> integer().
 -spec credit
         (qstate(), rabbit_types:ctag(), non_neg_integer(), credit_mode(),
          boolean()) ->
@@ -264,6 +265,13 @@ is_consumer_blocked(#qstate{credits = Credits}, CTag) ->
         {value, #credit{credit = C}} when C > 0 -> false;
         {value, #credit{}}                      -> true
     end.
+
+get_credit(#qstate{credits = Credits}, CTag) ->
+    case gb_trees:lookup(CTag, Credits) of
+        none                                    -> 0;
+        {value, #credit{credit = C}}           -> C
+    end.
+
 
 credit(Limiter = #qstate{credits = Credits}, CTag, Crd, Mode, IsEmpty) ->
     {Res, Cr} =

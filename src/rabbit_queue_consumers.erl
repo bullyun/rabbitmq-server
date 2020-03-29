@@ -238,6 +238,9 @@ deliver_to_consumer(FetchFun, QEntry = {ChPid, Consumer}, QName, State) ->
                          block_consumer(C#cr{limiter = Limiter}, QEntry),
                          undelivered;
                      {continue, Limiter} ->
+                         CTag = Consumer#consumer.tag,
+                         rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer CTag=~s Credit=~b",
+                                        [CTag, rabbit_limiter:get_credit(Limiter, CTag)]),
                          {R, State1} = deliver_to_consumer(FetchFun, Consumer,
                                                             C#cr{limiter = Limiter}, QEntry, QName, State),
                          {delivered, R, State1}
