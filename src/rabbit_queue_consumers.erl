@@ -300,7 +300,8 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
     OrderKeyConsumer1 = case find_order_key_consumer(OrderKey, OrderKeyState) of
         {ok, #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount}} ->
             {ChPid1, Consumer1} = QEntry1,
-            C1 = #cr{unsent_message_count = UnsentMessageCount} = lookup_ch(ChPid1),
+            C1 = lookup_ch(ChPid1),
+            #cr{unsent_message_count = UnsentMessageCount} = C1,
             #consumer{tag = CTag} = Consumer,
             #consumer{tag = CTag1} = Consumer1,
 
