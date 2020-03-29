@@ -303,8 +303,9 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
             C1 = #cr{unsent_message_count = UnsentMessageCount} = lookup_ch(ChPid1),
             #consumer{tag = CTag} = Consumer,
             #consumer{tag = CTag1} = Consumer1,
-            rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer ChPid1=~s CTag=~s UnsentMessageCount=~b"
-                , [ChPid1, CTag1, UnsentMessageCount]),
+
+%%            rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer ChPid1=~s CTag=~s UnsentMessageCount=~b"
+%%                , [ChPid1, CTag1, UnsentMessageCount]),
             if
                 CTag == CTag1 ->
                     %%节点没变化
@@ -348,8 +349,8 @@ deliver_message_to_consumer(Message, IsDelivered, AckTag,
                                     limiter               = Limiter},
                             QName) ->
 
-    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer CTag=~s credit=~b",
-        [CTag, rabbit_limiter:get_credit(Limiter, CTag)]),
+    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer CTag=~s credit=~b UnsentMessageCount=~b",
+        [CTag, rabbit_limiter:get_credit(Limiter, CTag), Count+1]),
 
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
                           {QName, self(), AckTag, IsDelivered, Message}),
