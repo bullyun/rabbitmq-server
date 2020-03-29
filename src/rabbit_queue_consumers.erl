@@ -247,8 +247,8 @@ deliver_to_consumer(FetchFun,
                     State) ->
     {{Message = #basic_message{routing_keys = Routekeys}, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
 
-    lists:foreach(fun (key) ->
-                        rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s)", [key])
+    lists:foreach(fun (Key) ->
+                        rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s)", [Key])
                   end, Routekeys),
     [OrderKey | _] = Routekeys,
 
