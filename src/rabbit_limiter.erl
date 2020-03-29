@@ -232,6 +232,8 @@ activate(L) -> L.
 
 can_send(L = #qstate{pid = Pid, state = State, credits = Credits},
          AckRequired, CTag) ->
+    rabbit_log:info("rabbit_limiter:can_send CTag=~s State=~s",
+        [CTag, State]),
     case is_consumer_blocked(L, CTag) of
         false -> case (State =/= active orelse
                        safe_call(Pid, {can_send, self(), AckRequired}, true)) of
@@ -243,6 +245,7 @@ can_send(L = #qstate{pid = Pid, state = State, credits = Credits},
     end.
 
 safe_call(Pid, Msg, ExitValue) ->
+    rabbit_log:info("rabbit_limiter:safe_call"),
     rabbit_misc:with_exit_handler(
       fun () -> ExitValue end,
       fun () -> gen_server2:call(Pid, Msg, infinity) end).

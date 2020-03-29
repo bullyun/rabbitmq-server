@@ -143,7 +143,7 @@ unacknowledged_message_count() ->
 add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     Username, State = #state{consumers = Consumers,
                              use       = CUInfo}) ->
-    rabbit_log:info("rabbit_queue_consumers:add CTag=~s", [CTag]),
+    rabbit_log:info("rabbit_queue_consumers:add CTag=~s LimiterActive=~b", [CTag, LimiterActive]),
     C = #cr{consumer_count = Count,
             limiter        = Limiter} = ch_record(ChPid, LimiterPid),
     Limiter1 = case LimiterActive of
