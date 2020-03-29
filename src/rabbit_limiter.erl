@@ -128,7 +128,7 @@
 -export([new/1, limit_prefetch/3, unlimit_prefetch/1, is_active/1,
          get_prefetch_limit/1, ack/2, pid/1]).
 %% queue API
--export([client/1, activate/1, can_send/3, resume/1, deactivate/1,
+-export([client/1, activate/1, can_send/3, force_send/3, resume/1, deactivate/1,
          is_suspended/1, is_consumer_blocked/2, get_credit/2, credit/5, ack_from_queue/3,
          drained/1, forget_consumer/2]).
 %% callbacks
@@ -163,6 +163,8 @@
 -spec activate(qstate()) -> qstate().
 -spec can_send(qstate(), boolean(), rabbit_types:ctag()) ->
           {'continue' | 'suspend', qstate()}.
+-spec force_send(qstate(), boolean(), rabbit_types:ctag()) ->
+            {'continue' | 'suspend', qstate()}.
 -spec resume(qstate()) -> qstate().
 -spec deactivate(qstate()) -> qstate().
 -spec is_suspended(qstate()) -> boolean().
@@ -244,6 +246,17 @@ can_send(L = #qstate{pid = Pid, state = State, credits = Credits},
         true  -> {suspend, L}
     end.
 
+force_send(L = #qstate{pid = Pid, state = State, credits = Credits},
+        AckRequired, CTag) ->
+    rabbit_log:info("rabbit_limiter:force_send CTag=~s State=~s",
+        [CTag, State]),
+    case (State =/= active orelse
+            safe_call(Pid, {can_send, self(), AckRequired}, true)) of
+        true  -> Credits1 = decrement_credit(CTag, Credits),
+            {continue, L#qstate{credits = Credits1}};
+        false -> {suspend,  L#qstate{state = suspended}}
+    end.
+
 safe_call(Pid, Msg, ExitValue) ->
     rabbit_log:info("rabbit_limiter:safe_call"),
     rabbit_misc:with_exit_handler(
@@ -289,7 +302,7 @@ ack_from_queue(Limiter = #qstate{credits = Credits}, CTag, Credit) ->
         case gb_trees:lookup(CTag, Credits) of
             {value, C = #credit{mode = auto, credit = C0}} ->
                 {update_credit(CTag, C#credit{credit = C0 + Credit}, Credits),
-                 C0 =:= 0 andalso Credit =/= 0};
+                 C0 =< 0 andalso (C0 + Credit) > 0};
             _ ->
                 {Credits, false}
         end,

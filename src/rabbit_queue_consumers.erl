@@ -299,23 +299,36 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                                     OrderKey, QEntry, QName, State=#state{order_key_state = OrderKeyState}) ->
     OrderKeyConsumer1 = case find_order_key_consumer(OrderKey, OrderKeyState) of
         {ok, #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount}} ->
+            {ChPid1, Consumer1} = QEntry1,
+            #consumer{tag = CTag} = Consumer,
+            #consumer{tag = CTag1} = Consumer1,
             if
-                MsgCount < 50 ->
-                    {ChPid1, Consumer1} = QEntry1,
-                    C1 = lookup_ch(ChPid1),
+                CTag == CTag1 ->
+                    %%节点没变化
                     rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer1"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
-                        Consumer1, C1, QName),
+                        Consumer, C, QName),
+                    #order_key_consumer{q_entry = QEntry, msg_count = MsgCount + 1};
+                MsgCount < 50 ->
+                    C1 = lookup_ch(ChPid1),
+                    {_, Limiter2} = rabbit_limiter:force_send(C1#cr.limiter,
+                                                            Consumer1#consumer.ack_required,
+                                                            Consumer1#consumer.tag),
+                    C2 = #cr{limiter = Limiter2},
+
+                    rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer2"),
+                    deliver_message_to_consumer(Message, IsDelivered, AckTag,
+                        Consumer1, C2, QName),
                     #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount + 1};
                 true ->
                     %%如果第一个堆积太厉害，跳变了，那会分配到其他consumer
-                    rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer2"),
+                    rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer3"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer, C, QName),
                     #order_key_consumer{q_entry = QEntry, msg_count = 1}
             end;
         _ ->
-            rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer3"),
+            rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer4"),
             deliver_message_to_consumer(Message, IsDelivered, AckTag,
                 Consumer, C, QName),
             #order_key_consumer{q_entry = QEntry, msg_count = 1}
