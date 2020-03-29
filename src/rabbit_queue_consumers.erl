@@ -143,7 +143,7 @@ unacknowledged_message_count() ->
 add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     Username, State = #state{consumers = Consumers,
                              use       = CUInfo}) ->
-    rabbit_log:info("rabbit_queue_consumers:add CTag=~s LimiterActive=~s", [CTag, LimiterActive]),
+    rabbit_log:info("rabbit_queue_consumers:add ChPid=~s CTag=~s LimiterActive=~s", [ChPid, CTag, LimiterActive]),
     C = #cr{consumer_count = Count,
             limiter        = Limiter} = ch_record(ChPid, LimiterPid),
     Limiter1 = case LimiterActive of
@@ -303,6 +303,8 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
             C1 = #cr{unsent_message_count = UnsentMessageCount} = lookup_ch(ChPid1),
             #consumer{tag = CTag} = Consumer,
             #consumer{tag = CTag1} = Consumer1,
+            rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer ChPid1=~s CTag=~s UnsentMessageCount=~b"
+                , [ChPid1, CTag1, UnsentMessageCount]),
             if
                 CTag == CTag1 ->
                     %%节点没变化
