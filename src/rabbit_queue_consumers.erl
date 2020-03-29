@@ -578,15 +578,15 @@ remove_order_key_consumers(ChPid,
                                 end, AckOrderKeys),
     State#order_key_state{order_key_consumers = OrderKeyConsumers1, ack_order_keys = AckOrderKeys1}.
 
-remove_all_order_key_consumers(State = #order_key_state{order_key_consumers = OrderKeyConsumers,
-                                                        ack_order_keys = AckOrderKeys}) ->
-    OrderKeyConsumers1 = maps:filter(fun (_, _) ->
-                                        false
-                                     end, OrderKeyConsumers),
-    AckOrderKeys1 = maps:filter(fun (_, _) ->
-                                    false
-                                end, AckOrderKeys),
-    State#order_key_state{order_key_consumers = OrderKeyConsumers1, ack_order_keys = AckOrderKeys1}.
+%%remove_all_order_key_consumers(State = #order_key_state{order_key_consumers = OrderKeyConsumers,
+%%                                                        ack_order_keys = AckOrderKeys}) ->
+%%    OrderKeyConsumers1 = maps:filter(fun (_, _) ->
+%%                                        false
+%%                                     end, OrderKeyConsumers),
+%%    AckOrderKeys1 = maps:filter(fun (_, _) ->
+%%                                    false
+%%                                end, AckOrderKeys),
+%%    State#order_key_state{order_key_consumers = OrderKeyConsumers1, ack_order_keys = AckOrderKeys1}.
 
 
 chan_pred(ChPid, Want) ->
