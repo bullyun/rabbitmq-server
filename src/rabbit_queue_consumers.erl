@@ -314,7 +314,7 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                     {_, Limiter2} = rabbit_limiter:force_send(C1#cr.limiter,
                                                             Consumer1#consumer.ack_required,
                                                             Consumer1#consumer.tag),
-                    C2 = #cr{limiter = Limiter2},
+                    C2 = C1#cr{limiter = Limiter2},
 
                     rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer2"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
