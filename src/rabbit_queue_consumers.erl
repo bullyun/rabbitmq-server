@@ -242,7 +242,11 @@ deliver_to_consumer(FetchFun, QEntry = {ChPid, Consumer}, QName, State) ->
                  end
     end.
 
-%%content{properties = #'P_basic'
+ensure_properties_decode(Message) ->
+    #basic_message{content = Content} = Message,
+    Content1 = rabbit_binary_parser:ensure_content_decoded(Content),
+    Message#basic_message{content = Content1}.
+
 get_headers(#basic_message{content = #content{properties = #'P_basic'{headers = Headers}}}) ->
     case Headers of
         undefined -> [];
@@ -261,24 +265,25 @@ deliver_to_consumer(FetchFun,
                     C, QEntry, QName,
                     State) ->
     {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
-    Headers = get_headers(Message),
+    Message1 = ensure_properties_decode(Message),
 
+    Headers = get_headers(Message1),
     lists:foreach(fun ({Key, _Type, Value}) ->
                         rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s, value=~s)", [Key, Value])
                   end, Headers),
-    OrderKey = get_order_key(Message),
+    OrderKey = get_order_key(Message1),
 
     rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(OrderKey=~s)", [OrderKey]),
 
     State1 = case OrderKey of
         undefined ->
             rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer3"),
-            deliver_message_to_consumer(Message, IsDelivered, AckTag,
+            deliver_message_to_consumer(Message1, IsDelivered, AckTag,
                                         Consumer, C, QName),
             State;
         _ ->
             rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer2"),
-            deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
+            deliver_message_order_to_consumer(Message1, IsDelivered, AckTag,
                                                 Consumer, C,
                                                 OrderKey, QEntry, QName, State)
     end,
