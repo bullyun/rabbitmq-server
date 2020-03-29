@@ -242,8 +242,9 @@ deliver_to_consumer(FetchFun, QEntry = {ChPid, Consumer}, QName, State) ->
                  end
     end.
 
-get_headers(#basic_message{content = Content}) ->
-    case (Content#content.properties)#'P_basic'.headers of
+%%content{properties = #'P_basic'
+get_headers(#basic_message{content = #content{properties = #'P_basic'{headers = Headers}}}) ->
+    case Headers of
         undefined -> [];
         H         -> H
     end.
@@ -252,7 +253,7 @@ get_order_key(Message) ->
     Headers = get_headers(Message),
     case lists:keyfind(<<"x-order-key">>, 1, Headers) of
         false -> undefined;
-        {_Key, Value} -> Value
+        {_Key, _Type, Value} -> Value
     end.
 
 deliver_to_consumer(FetchFun,
@@ -262,7 +263,7 @@ deliver_to_consumer(FetchFun,
     {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
     Headers = get_headers(Message),
 
-    lists:foreach(fun ({Key, Value}) ->
+    lists:foreach(fun ({Key, _Type, Value}) ->
                         rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s, value=~s)", [Key, Value])
                   end, Headers),
     OrderKey = get_order_key(Message),
