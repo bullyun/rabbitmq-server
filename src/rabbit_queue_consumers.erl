@@ -17,6 +17,7 @@
 -module(rabbit_queue_consumers).
 
 -include("rabbit.hrl").
+-include("rabbit_framing.hrl").
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, count/0,
          unacknowledged_message_count/0, add/10, remove/3, erase_ch/2,
