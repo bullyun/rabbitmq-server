@@ -143,7 +143,7 @@ unacknowledged_message_count() ->
 add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     Username, State = #state{consumers = Consumers,
                              use       = CUInfo}) ->
-    rabbit_log:info("rabbit_queue_consumers:add CTag=~s LimiterActive=~b", [CTag, LimiterActive]),
+    rabbit_log:info("rabbit_queue_consumers:add CTag=~s LimiterActive=~s", [CTag, LimiterActive]),
     C = #cr{consumer_count = Count,
             limiter        = Limiter} = ch_record(ChPid, LimiterPid),
     Limiter1 = case LimiterActive of
@@ -238,9 +238,9 @@ deliver_to_consumer(FetchFun, QEntry = {ChPid, Consumer}, QName, State) ->
                          block_consumer(C#cr{limiter = Limiter}, QEntry),
                          undelivered;
                      {continue, Limiter} ->
-                         CTag = Consumer#consumer.tag,
-                         rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer CTag=~s Credit=~b",
-                                        [CTag, rabbit_limiter:get_credit(Limiter, CTag)]),
+%%                         CTag = Consumer#consumer.tag,
+%%                         rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer CTag=~s Credit=~b",
+%%                                        [CTag, rabbit_limiter:get_credit(Limiter, CTag)]),
                          {R, State1} = deliver_to_consumer(FetchFun, Consumer,
                                                             C#cr{limiter = Limiter}, QEntry, QName, State),
                          {delivered, R, State1}
@@ -282,12 +282,12 @@ deliver_to_consumer(FetchFun,
 
     State1 = case OrderKey of
         undefined ->
-            rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer"),
+%%            rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer"),
             deliver_message_to_consumer(Message1, IsDelivered, AckTag,
                                         Consumer, C, QName),
             State;
         _ ->
-            rabbit_log:info("to rabbit_queue_consumers:deliver_message_order_to_consumer"),
+%%            rabbit_log:info("to rabbit_queue_consumers:deliver_message_order_to_consumer"),
             deliver_message_order_to_consumer(Message1, IsDelivered, AckTag,
                                                 Consumer, C,
                                                 OrderKey, QEntry, QName, State)
@@ -305,7 +305,7 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
             if
                 CTag == CTag1 ->
                     %%节点没变化
-                    rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer1"),
+                    rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer1"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer, C, QName),
                     #order_key_consumer{q_entry = QEntry, msg_count = MsgCount + 1};
@@ -316,33 +316,38 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                                                             Consumer1#consumer.tag),
                     C2 = C1#cr{limiter = Limiter2},
 
-                    rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer2"),
+                    rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer2"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer1, C2, QName),
                     #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount + 1};
                 true ->
                     %%如果第一个堆积太厉害，跳变了，那会分配到其他consumer
-                    rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer3"),
+                    rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer3"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer, C, QName),
                     #order_key_consumer{q_entry = QEntry, msg_count = 1}
             end;
         _ ->
-            rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer4"),
+            rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer4"),
             deliver_message_to_consumer(Message, IsDelivered, AckTag,
                 Consumer, C, QName),
             #order_key_consumer{q_entry = QEntry, msg_count = 1}
     end,
     OrderKeyState1 = add_order_key_consumer(OrderKey, OrderKeyConsumer1, AckTag, OrderKeyState),
-    State#state{order_key_state = OrderKeyState1}.
+    State2 = State#state{order_key_state = OrderKeyState1},
+    State2.
 
 deliver_message_to_consumer(Message, IsDelivered, AckTag,
                             #consumer{tag           = CTag,
                                        ack_required  = AckRequired},
                             C = #cr{ch_pid                = ChPid,
                                     acktags               = ChAckTags,
-                                    unsent_message_count  = Count},
+                                    unsent_message_count  = Count,
+                                    limiter               = Limiter},
                             QName) ->
+
+    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer CTag=~s credit=~b",
+        [CTag, rabbit_limiter:get_credit(Limiter, CTag)]),
 
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
                           {QName, self(), AckTag, IsDelivered, Message}),
@@ -374,6 +379,8 @@ subtract_acks(ChPid, AckTags, State=#state{order_key_state = OrderKeyState}) ->
                   fun (CTag, Count, {UnblockedN, LimN}) ->
                           {Unblocked1, LimN1} =
                               rabbit_limiter:ack_from_queue(LimN, CTag, Count),
+                              rabbit_log:info("rabbit_queue_consumers:subtract_acks CTag=~s credit=~b",
+                                  [CTag, rabbit_limiter:get_credit(LimN, CTag)]),
                           {UnblockedN orelse Unblocked1, LimN1}
                   end, {false, Lim}, CTagCounts),
             C2 = C#cr{acktags = AckTags2, limiter = Lim2},

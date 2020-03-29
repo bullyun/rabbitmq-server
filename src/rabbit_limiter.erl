@@ -234,8 +234,8 @@ activate(L) -> L.
 
 can_send(L = #qstate{pid = Pid, state = State, credits = Credits},
          AckRequired, CTag) ->
-    rabbit_log:info("rabbit_limiter:can_send CTag=~s State=~s",
-        [CTag, State]),
+%%    rabbit_log:info("rabbit_limiter:can_send CTag=~s State=~s",
+%%        [CTag, State]),
     case is_consumer_blocked(L, CTag) of
         false -> case (State =/= active orelse
                        safe_call(Pid, {can_send, self(), AckRequired}, true)) of
@@ -248,8 +248,8 @@ can_send(L = #qstate{pid = Pid, state = State, credits = Credits},
 
 force_send(L = #qstate{pid = Pid, state = State, credits = Credits},
         AckRequired, CTag) ->
-    rabbit_log:info("rabbit_limiter:force_send CTag=~s State=~s",
-        [CTag, State]),
+%%    rabbit_log:info("rabbit_limiter:force_send CTag=~s State=~s",
+%%        [CTag, State]),
     case (State =/= active orelse
             safe_call(Pid, {can_send, self(), AckRequired}, true)) of
         true  -> Credits1 = decrement_credit(CTag, Credits),
@@ -258,7 +258,7 @@ force_send(L = #qstate{pid = Pid, state = State, credits = Credits},
     end.
 
 safe_call(Pid, Msg, ExitValue) ->
-    rabbit_log:info("rabbit_limiter:safe_call"),
+%%    rabbit_log:info("rabbit_limiter:safe_call"),
     rabbit_misc:with_exit_handler(
       fun () -> ExitValue end,
       fun () -> gen_server2:call(Pid, Msg, infinity) end).
@@ -385,10 +385,10 @@ handle_call({can_send, QPid, AckRequired}, _From,
             State = #lim{volume = Volume, prefetch_count = PrefetchCount}) ->
     case prefetch_limit_reached(State) of
         true  ->
-            rabbit_log:info("rabbit_limiter:handle_call(can_send) Volume=~b PrefetchCount=~b", [Volume, PrefetchCount]),
+%%            rabbit_log:info("rabbit_limiter:handle_call(can_send) Volume=~b PrefetchCount=~b", [Volume, PrefetchCount]),
             {reply, false, limit_queue(QPid, State)};
         false ->
-            rabbit_log:info("rabbit_limiter:handle_call(can_send)2 Volume=~b PrefetchCount=~b", [Volume, PrefetchCount]),
+%%            rabbit_log:info("rabbit_limiter:handle_call(can_send)2 Volume=~b PrefetchCount=~b", [Volume, PrefetchCount]),
             {reply, true,  State#lim{volume = if AckRequired -> Volume + 1;
                                                       true        -> Volume
                                                    end}}
