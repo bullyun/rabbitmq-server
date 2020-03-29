@@ -550,7 +550,7 @@ add_order_key_consumer(OrderKey, OrderKeyConsumer=#order_key_consumer{q_entry = 
         State = #order_key_state{order_key_consumers = OrderKeyConsumers, ack_order_keys = AckOrderKeys}) ->
 
     {_ChPid, #consumer{tag = CTag}} = QEntry,
-    rabbit_log:info("rabbit_queue_consumers:add_order_key_consumer OrderKey=~s CTag=~s AckTag=~s MsgCount=~b"
+    rabbit_log:info("rabbit_queue_consumers:add_order_key_consumer OrderKey=~s CTag=~s AckTag=~b MsgCount=~b"
                     , [OrderKey, CTag, AckTag, MsgCount]),
     State1 = State#order_key_state{order_key_consumers = maps:put(OrderKey, OrderKeyConsumer, OrderKeyConsumers)},
     State2 = State1#order_key_state{ack_order_keys = maps:put(AckTag,
