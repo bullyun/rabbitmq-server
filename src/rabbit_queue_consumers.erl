@@ -143,6 +143,7 @@ unacknowledged_message_count() ->
 add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     Username, State = #state{consumers = Consumers,
                              use       = CUInfo}) ->
+    rabbit_log:info("rabbit_queue_consumers:add CTag=~s", [CTag]),
     C = #cr{consumer_count = Count,
             limiter        = Limiter} = ch_record(ChPid, LimiterPid),
     Limiter1 = case LimiterActive of
@@ -208,6 +209,7 @@ deliver(FetchFun, QName, State) -> deliver(FetchFun, QName, false, State).
 
 deliver(FetchFun, QName, ConsumersChanged,
         State = #state{consumers = Consumers}) ->
+
     case priority_queue:out_p(Consumers) of
         {empty, _} ->
             {undelivered, ConsumersChanged,
@@ -261,7 +263,7 @@ get_order_key(Message) ->
     end.
 
 deliver_to_consumer(FetchFun,
-                    Consumer = #consumer{ack_required = AckRequired},
+                    Consumer = #consumer{ack_required = AckRequired, tag = CTag},
                     C, QEntry, QName,
                     State) ->
     {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
@@ -273,7 +275,7 @@ deliver_to_consumer(FetchFun,
 %%                  end, Headers),
 
     OrderKey = get_order_key(Message1),
-    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(OrderKey=~s)", [OrderKey]),
+    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(OrderKey=~s CTag=~s)", [OrderKey, CTag]),
 
     State1 = case OrderKey of
         undefined ->
@@ -303,6 +305,7 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                         Consumer1, C1, QName),
                     #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount + 1};
                 true ->
+                    %%如果第一个堆积太厉害，跳变了，那会分配到其他consumer
                     rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer2"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer, C, QName),
