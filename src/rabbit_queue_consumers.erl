@@ -575,11 +575,11 @@ remove_order_key_ack(AckTag,
                     MsgCount1 = MsgCount - 1,
                     if
                         MsgCount1 == 0 ->
-                            rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers:remove OrderKey=~s CTag=~s AckTag=~s",
+                            rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers:remove OrderKey=~s CTag=~s AckTag=~b",
                                 [OrderKey, CTag, AckTag]),
                             State#order_key_state{order_key_consumers = maps:remove(OrderKey, OrderKeyConsumers)};
                         true ->
-                            rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers:remove OrderKey=~s CTag=~s AckTag=~s MsgCount=~b",
+                            rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers:remove OrderKey=~s CTag=~s AckTag=~b MsgCount=~b",
                                 [OrderKey, CTag, AckTag, MsgCount1]),
                             State#order_key_state{order_key_consumers = maps:put(OrderKey,
                                                 OrderKeyConsumer#order_key_consumer{msg_count = MsgCount1},
