@@ -241,30 +241,44 @@ deliver_to_consumer(FetchFun, QEntry = {ChPid, Consumer}, QName, State) ->
                  end
     end.
 
+get_headers(Message = #basic_message{content = Content}) ->
+    case (Content#content.properties)#'P_basic'.headers of
+        undefined -> [];
+        H         -> H
+    end.
+
+get_order_key(Message) ->
+    Headers = get_headers(Message),
+    case lists:keyfind(<<"x-order-key">>, 1, Headers) of
+        false -> undefined;
+        {_Key, Value} -> Value
+    end.
+
 deliver_to_consumer(FetchFun,
                     Consumer = #consumer{ack_required = AckRequired},
                     C, QEntry, QName,
                     State) ->
-    {{Message = #basic_message{routing_keys = Routekeys}, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
+    {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
+    Headers = get_headers(Message),
 
-    lists:foreach(fun (Key) ->
-                        rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s)", [Key])
-                  end, Routekeys),
-    [OrderKey | _] = Routekeys,
+    lists:foreach(fun ({Key, Value}) ->
+                        rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s, value=~s)", [Key, Value])
+                  end, Headers),
+    OrderKey = get_order_key(Message),
 
     rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(OrderKey=~s)", [OrderKey]),
 
-    State1 = if
-        true ->
+    State1 = case OrderKey of
+        undefined ->
+            rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer3"),
+            deliver_message_to_consumer(Message, IsDelivered, AckTag,
+                                        Consumer, C, QName),
+            State;
+        _ ->
             rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer2"),
             deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
-                Consumer, C,
-                OrderKey, QEntry, QName, State)
-%%        true ->
-%%            rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer3"),
-%%            deliver_message_to_consumer(Message, IsDelivered, AckTag,
-%%                Consumer, C, QName),
-%%            State
+                                                Consumer, C,
+                                                OrderKey, QEntry, QName, State)
     end,
     {R, State1}.
 
