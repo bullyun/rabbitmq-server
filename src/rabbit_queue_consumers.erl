@@ -360,7 +360,7 @@ subtract_acks(ChPid, AckTags, State=#state{order_key_state = OrderKeyState}) ->
             C2 = C#cr{acktags = AckTags2, limiter = Lim2},
             case Unblocked of
                 true  -> case unblock(C2, State1) of
-                             unchanged -> {unchaned, State1};
+                             unchanged -> {unchanged, State1};
                              {unblocked, State2} -> {unblocked, State2}
                          end;
                 false -> update_ch_record(C2),
