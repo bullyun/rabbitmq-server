@@ -267,22 +267,22 @@ deliver_to_consumer(FetchFun,
     {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
     Message1 = ensure_properties_decode(Message),
 
-    Headers = get_headers(Message1),
-    lists:foreach(fun ({Key, _Type, Value}) ->
-                        rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s, value=~s)", [Key, Value])
-                  end, Headers),
-    OrderKey = get_order_key(Message1),
+%%    Headers = get_headers(Message1),
+%%    lists:foreach(fun ({Key, _Type, Value}) ->
+%%                        rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s, value=~s)", [Key, Value])
+%%                  end, Headers),
 
+    OrderKey = get_order_key(Message1),
     rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(OrderKey=~s)", [OrderKey]),
 
     State1 = case OrderKey of
         undefined ->
-            rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer3"),
+            rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer"),
             deliver_message_to_consumer(Message1, IsDelivered, AckTag,
                                         Consumer, C, QName),
             State;
         _ ->
-            rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer2"),
+            rabbit_log:info("to rabbit_queue_consumers:deliver_message_order_to_consumer"),
             deliver_message_order_to_consumer(Message1, IsDelivered, AckTag,
                                                 Consumer, C,
                                                 OrderKey, QEntry, QName, State)
@@ -298,15 +298,18 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                 MsgCount < 50 ->
                     {ChPid1, Consumer1} = QEntry1,
                     C1 = lookup_ch(ChPid1),
+                    rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer1"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer1, C1, QName),
                     #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount + 1};
                 true ->
+                    rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer2"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer, C, QName),
                     #order_key_consumer{q_entry = QEntry, msg_count = 1}
             end;
         _ ->
+            rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer3"),
             deliver_message_to_consumer(Message, IsDelivered, AckTag,
                 Consumer, C, QName),
             #order_key_consumer{q_entry = QEntry, msg_count = 1}
@@ -543,26 +546,41 @@ remove_consumer(ChPid, CTag, Queue) ->
 remove_consumers(ChPid, Queue) ->
     priority_queue:filter(chan_pred(ChPid, false), Queue).
 
-add_order_key_consumer(OrderKey, OrderKeyConsumer=#order_key_consumer{q_entry = QEntry}, AckTag,
+add_order_key_consumer(OrderKey, OrderKeyConsumer=#order_key_consumer{q_entry = QEntry, msg_count = MsgCount}, AckTag,
         State = #order_key_state{order_key_consumers = OrderKeyConsumers, ack_order_keys = AckOrderKeys}) ->
+
+    {_ChPid, #consumer{tag = CTag}} = QEntry,
+    rabbit_log:info("rabbit_queue_consumers:add_order_key_consumer OrderKey=~s CTag=~s AckTag=~s MsgCount=~b"
+                    , [OrderKey, CTag, AckTag, MsgCount]),
     State1 = State#order_key_state{order_key_consumers = maps:put(OrderKey, OrderKeyConsumer, OrderKeyConsumers)},
-    State1#order_key_state{ack_order_keys = maps:put(AckTag, #ack_order_key{q_entry = QEntry, order_key = OrderKey}
-                                                        , AckOrderKeys)}.
+    State2 = State1#order_key_state{ack_order_keys = maps:put(AckTag,
+                                                        #ack_order_key{q_entry = QEntry, order_key = OrderKey},
+                                                        AckOrderKeys)},
+    rabbit_log:info("rabbit_queue_consumers:add_order_key_consumer OrderKeyConsumers=~b AckOrderKeys=~b",
+                    [maps:size(State2#order_key_state.order_key_consumers),
+                        maps:size(State2#order_key_state.ack_order_keys)]),
+    State2.
+
 
 find_order_key_consumer(OrderKey, #order_key_state{order_key_consumers = OrderKeyConsumers}) ->
     maps:find(OrderKey, OrderKeyConsumers).
 
 remove_order_key_ack(AckTag,
         State = #order_key_state{order_key_consumers = OrderKeyConsumers, ack_order_keys = AckOrderKeys}) ->
-    case maps:find(AckTag, AckOrderKeys) of
-        {ok, #ack_order_key{order_key = OrderKey}} ->
+    State2 = case maps:find(AckTag, AckOrderKeys) of
+        {ok, #ack_order_key{q_entry = QEntry, order_key = OrderKey}} ->
+            {_ChPid, #consumer{tag = CTag}} = QEntry,
             State1 = case maps:find(OrderKey, OrderKeyConsumers) of
                 {ok, OrderKeyConsumer = #order_key_consumer{msg_count = MsgCount}} ->
                     MsgCount1 = MsgCount - 1,
                     if
                         MsgCount1 == 0 ->
+                            rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers:remove OrderKey=~s CTag=~s AckTag=~s",
+                                [OrderKey, CTag, AckTag]),
                             State#order_key_state{order_key_consumers = maps:remove(OrderKey, OrderKeyConsumers)};
                         true ->
+                            rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers:remove OrderKey=~s CTag=~s AckTag=~s MsgCount=~b",
+                                [OrderKey, CTag, AckTag, MsgCount1]),
                             State#order_key_state{order_key_consumers = maps:put(OrderKey,
                                                 OrderKeyConsumer#order_key_consumer{msg_count = MsgCount1},
                                                 OrderKeyConsumers)}
@@ -571,7 +589,11 @@ remove_order_key_ack(AckTag,
             end,
             State1#order_key_state{ack_order_keys = maps:remove(AckTag, AckOrderKeys)};
         _ -> State
-    end.
+    end,
+    rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers=~b AckOrderKeys=~b",
+                    [maps:size(State2#order_key_state.order_key_consumers),
+                        maps:size(State2#order_key_state.ack_order_keys)]),
+    State2.
 
 
 remove_order_key_acks([], State) ->
@@ -588,7 +610,11 @@ remove_order_key_consumer(ChPid, CTag,
     AckOrderKeys1 = maps:filter(fun (_, #ack_order_key{q_entry = {ChPid1, #consumer{tag = CTag1}}}) ->
                                     (ChPid1 /= ChPid) or (CTag1 /= CTag)
                                 end, AckOrderKeys),
-    State#order_key_state{order_key_consumers = OrderKeyConsumers1, ack_order_keys = AckOrderKeys1}.
+    State2 = State#order_key_state{order_key_consumers = OrderKeyConsumers1, ack_order_keys = AckOrderKeys1},
+    rabbit_log:info("rabbit_queue_consumers:remove_order_key_consumers OrderKeyConsumers=~b AckOrderKeys=~b CTag=~s",
+        [maps:size(State2#order_key_state.order_key_consumers),
+            maps:size(State2#order_key_state.ack_order_keys), CTag]),
+    State2.
 
 remove_order_key_consumers(ChPid,
         State = #order_key_state{order_key_consumers = OrderKeyConsumers, ack_order_keys = AckOrderKeys}) ->
@@ -598,7 +624,11 @@ remove_order_key_consumers(ChPid,
     AckOrderKeys1 = maps:filter(fun (_, #ack_order_key{q_entry = {ChPid1, _}}) ->
                                     (ChPid1 /= ChPid)
                                 end, AckOrderKeys),
-    State#order_key_state{order_key_consumers = OrderKeyConsumers1, ack_order_keys = AckOrderKeys1}.
+    State2 = State#order_key_state{order_key_consumers = OrderKeyConsumers1, ack_order_keys = AckOrderKeys1},
+    rabbit_log:info("rabbit_queue_consumers:remove_order_key_consumers2 OrderKeyConsumers=~b AckOrderKeys=~b",
+        [maps:size(State2#order_key_state.order_key_consumers),
+            maps:size(State2#order_key_state.ack_order_keys)]),
+    State2.
 
 %%remove_all_order_key_consumers(State = #order_key_state{order_key_consumers = OrderKeyConsumers,
 %%                                                        ack_order_keys = AckOrderKeys}) ->
