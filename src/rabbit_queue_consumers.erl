@@ -564,7 +564,8 @@ remove_order_key_ack(AckTag,
                             State#order_key_state{order_key_consumers = maps:remove(OrderKey, OrderKeyConsumers)};
                         true ->
                             State#order_key_state{order_key_consumers = maps:put(OrderKey,
-                                                OrderKeyConsumer#order_key_consumer{msg_count = MsgCount1})}
+                                                OrderKeyConsumer#order_key_consumer{msg_count = MsgCount1},
+                                                OrderKeyConsumers)}
                     end;
                 _ -> State
             end,
