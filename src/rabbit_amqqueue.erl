@@ -1018,6 +1018,7 @@ internal_delete1(QueueName, OnlyDurable) ->
     internal_delete1(QueueName, OnlyDurable, normal).
 
 internal_delete1(QueueName, OnlyDurable, Reason) ->
+    rabbit_log:info("internal_delete1"),
     ok = mnesia:delete({rabbit_queue, QueueName}),
     case Reason of
         auto_delete ->
@@ -1193,6 +1194,7 @@ delete_queues_on_node_down(Node) ->
     ])).
 
 delete_queue(QueueName) ->
+    rabbit_log:info("delete_queue"),
     ok = mnesia:delete({rabbit_queue, QueueName}),
     rabbit_binding:remove_transient_for_destination(QueueName).
 
