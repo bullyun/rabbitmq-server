@@ -480,22 +480,18 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
         {ok, Q = #amqqueue{state = live}} when RetriesLeft =:= 0 ->
             %% Something bad happened to that queue, we are bailing out
             %% on processing current request.
-            rabbit_log:info("lookup(~s) live", [Name#resource.name]),
             E({absent, Q, timeout});
         {ok, Q = #amqqueue{state = stopped}} when RetriesLeft =:= 0 ->
             %% The queue was stopped and not migrated
-            rabbit_log:info("lookup(~s) stopped", [Name#resource.name]),
             E({absent, Q, stopped});
         %% The queue process has crashed with unknown error
         {ok, Q = #amqqueue{state = crashed}} ->
-            rabbit_log:info("lookup(~s) crashed", [Name#resource.name]),
             E({absent, Q, crashed});
         %% The queue process has been stopped by a supervisor.
         %% In that case a synchronised slave can take over
         %% so we should retry.
         {ok, Q = #amqqueue{state = stopped}} ->
             %% The queue process was stopped by the supervisor
-            rabbit_log:info("lookup(~s) stopped2", [Name#resource.name]),
             rabbit_misc:with_exit_handler(
               fun () -> retry_wait(Q, F, E, RetriesLeft) end,
               fun () -> F(Q) end);
@@ -503,7 +499,6 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
         %% The master node can go away or queue can be killed
         %% so we retry, waiting for a slave to take over.
         {ok, Q = #amqqueue{state = live}} ->
-            rabbit_log:info("lookup(~s) live2", [Name#resource.name]),
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
             %% with the QPid. F() should be written s.t. that this
@@ -514,7 +509,6 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
               fun () -> retry_wait(Q, F, E, RetriesLeft) end,
               fun () -> F(Q) end);
         {error, not_found} ->
-            rabbit_log:info("lookup(~s) not_found", [Name#resource.name]),
             E(not_found_or_absent_dirty(Name))
     end.
 
@@ -582,8 +576,6 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
 
 assert_args_equivalence(#amqqueue{name = QueueName, arguments = Args},
                         RequiredArgs) ->
-    %%rabbit_log:info(Args),
-    %%rabbit_log:info(RequiredArgs),
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
                                         [Key || {Key, _Fun} <- declare_args()]).
 
@@ -888,12 +880,8 @@ delete_immediately(QPids) ->
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     case wait_for_promoted_or_stopped(Q) of
         {promoted, #amqqueue{pid = QPid}} ->
-            rabbit_log:info("delete promoted"),
-            Ret = delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]}),
-            rabbit_log:info("delete promoted2"),
-            Ret;
+            delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]});
         {stopped, Q1} ->
-            rabbit_log:info("delete stopped"),
             #resource{name = Name, virtual_host = Vhost} = Q1#amqqueue.name,
             case IfEmpty of
                 true ->
@@ -912,7 +900,6 @@ delete(Q, IfUnused, IfEmpty, ActingUser) ->
                     {ok, 0}
             end;
         {error, not_found} ->
-            rabbit_log:info("delete not_found"),
             %% Assume the queue was deleted
             {ok, 0}
     end.
@@ -1020,7 +1007,6 @@ internal_delete1(QueueName, OnlyDurable) ->
     internal_delete1(QueueName, OnlyDurable, normal).
 
 internal_delete1(QueueName, OnlyDurable, Reason) ->
-    rabbit_log:info("internal_delete1"),
     ok = mnesia:delete({rabbit_queue, QueueName}),
     case Reason of
         auto_delete ->
@@ -1196,7 +1182,6 @@ delete_queues_on_node_down(Node) ->
     ])).
 
 delete_queue(QueueName) ->
-    rabbit_log:info("delete_queue"),
     ok = mnesia:delete({rabbit_queue, QueueName}),
     rabbit_binding:remove_transient_for_destination(QueueName).
 

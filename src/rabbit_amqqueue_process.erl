@@ -439,7 +439,6 @@ init_dlx(DLX, State = #q{q = #amqqueue{name = QName}}) ->
 init_dlx_rkey(RoutingKey, State) -> State#q{dlx_routing_key = RoutingKey}.
 
 init_max_length(MaxLen, State) ->
-    rabbit_log:info("init_max_length(~b)", MaxLen),
     {_Dropped, State1} = maybe_drop_head(State#q{max_length = MaxLen}),
     State1.
 
@@ -1284,16 +1283,10 @@ handle_call({delete, IfUnused, IfEmpty, ActingUser}, _From,
     IsEmpty  = BQ:is_empty(BQS),
     IsUnused = is_unused(State),
     if
-        IfEmpty  and not(IsEmpty)  ->
-            rabbit_log:info("handle_call(delete)1"),
-            reply({error, not_empty}, State);
-        IfUnused and not(IsUnused) ->
-            rabbit_log:info("handle_call(delete)2"),
-            reply({error,    in_use}, State);
-        true                       ->
-            rabbit_log:info("handle_call(delete)3"),
-            stop({ok, BQ:len(BQS)},
-                State#q{status = {terminated_by, ActingUser}})
+        IfEmpty  and not(IsEmpty)  -> reply({error, not_empty}, State);
+        IfUnused and not(IsUnused) -> reply({error,    in_use}, State);
+        true                       -> stop({ok, BQ:len(BQS)},
+                                           State#q{status = {terminated_by, ActingUser}})
     end;
 
 handle_call(purge, _From, State = #q{backing_queue       = BQ,

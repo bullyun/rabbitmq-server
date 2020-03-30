@@ -56,8 +56,6 @@
 
 -record(ack_order_key, {q_entry, order_key}).
 
-%%-record(message, {routing_keys, id}).
-
 %%----------------------------------------------------------------------------
 
 -type time_micros() :: non_neg_integer().
@@ -108,7 +106,7 @@
 %%----------------------------------------------------------------------------
 
 new() ->
-    rabbit_log:info("rabbit_queue_consumers:new()"),
+%%    rabbit_log:info("rabbit_queue_consumers:new()"),
     #state{consumers = priority_queue:new(),
                 use       = {active,
                              erlang:monotonic_time(micro_seconds),
@@ -258,15 +256,17 @@ deliver_to_consumer(FetchFun,
 %%    lists:foreach(fun ({Key, _Type, Value}) ->
 %%                        rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s, value=~s)", [Key, Value])
 %%                  end, Headers),
-
+    
     OrderKey = get_order_key(Message1),
-    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(OrderKey=~s CTag=~s)", [OrderKey, CTag]),
+
+    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer start AckTag=~b OrderKey=~s CTag=~s "
+        , [AckTag, OrderKey, CTag]),
 
     State1 = case OrderKey of
         undefined ->
 %%            rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer"),
             deliver_message_to_consumer(Message1, IsDelivered, AckTag,
-                                        Consumer, C, QName),
+                                        Consumer, C, OrderKey, QName),
             State;
         _ ->
 %%            rabbit_log:info("to rabbit_queue_consumers:deliver_message_order_to_consumer"),
@@ -277,46 +277,71 @@ deliver_to_consumer(FetchFun,
     {R, State1}.
 
 deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
-                                    Consumer, C,
+                                    Consumer = #consumer{tag = CTag}, C,
                                     OrderKey, QEntry, QName, State=#state{order_key_state = OrderKeyState}) ->
     OrderKeyConsumer1 = case find_order_key_consumer(OrderKey, OrderKeyState) of
         {ok, #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount}} ->
+
             {ChPid1, Consumer1} = QEntry1,
             C1 = lookup_ch(ChPid1),
-            #consumer{tag = CTag} = Consumer,
             #consumer{tag = CTag1} = Consumer1,
-            Credit1 = rabbit_limiter:get_credit(C1#cr.limiter, CTag1),
+            #cr{limiter = Limiter1} = C1,
+            Limiter1 = C1#cr.limiter,
+            Credit1 = rabbit_limiter:get_credit(Limiter1, CTag1),
 
 %%            rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer ChPid1=~s CTag=~s UnsentMessageCount=~b"
 %%                , [ChPid1, CTag1, UnsentMessageCount]),
+
+
+            %%考虑几个点：
+            %%1. Consumer1==Consumer，直接发送，计数加1
+            %%2. Consumer1堆积数量小于50的，往Consumer1发。如果force_send都无法发送，切Consumer
+            %%3. Consumer1堆积数量大于50的，切到Consumer，计数从1开发
             if
                 CTag == CTag1 ->
                     %%节点没变化
                     rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer1"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
-                        Consumer, C, QName),
+                                                    Consumer, C, OrderKey, QName),
                     #order_key_consumer{q_entry = QEntry, msg_count = MsgCount + 1};
                 Credit1 > -50 ->
-                    {_, Limiter2} = rabbit_limiter:force_send(C1#cr.limiter,
-                                                            Consumer1#consumer.ack_required,
-                                                            Consumer1#consumer.tag),
-                    C2 = C1#cr{limiter = Limiter2},
+                    case rabbit_limiter:force_send(Limiter1,
+                                                    Consumer1#consumer.ack_required,
+                                                    Consumer1#consumer.tag) of
+                        {suspend, Limiter2} ->
+                            %%无法发送也没办法，只能通过Consumer发送
+                            rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer2"),
+                            deliver_message_to_consumer(Message, IsDelivered, AckTag,
+                                                        Consumer, C, OrderKey, QName),
+                            #order_key_consumer{q_entry = QEntry, msg_count = 1};
+                        {continue, Limiter2} ->
+                            C2 = C1#cr{limiter = Limiter2},
+                            rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer3"),
+                            deliver_message_to_consumer(Message, IsDelivered, AckTag,
+                                                        Consumer1, C2, OrderKey, QName),
+                            #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount + 1}
+                    end;
 
-                    rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer2"),
-                    deliver_message_to_consumer(Message, IsDelivered, AckTag,
-                        Consumer1, C2, QName),
-                    #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount + 1};
+%%                    {_, Limiter2} = rabbit_limiter:force_send(C1#cr.limiter,
+%%                                                            Consumer1#consumer.ack_required,
+%%                                                            Consumer1#consumer.tag),
+%%                    C2 = C1#cr{limiter = Limiter2},
+%%
+%%                    rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer2"),
+%%                    deliver_message_to_consumer(Message, IsDelivered, AckTag,
+%%                        Consumer1, C2, QName),
+%%                    #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount + 1};
                 true ->
                     %%如果第一个堆积太厉害，跳变了，那会分配到其他consumer
-                    rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer3"),
+                    rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer4"),
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
-                        Consumer, C, QName),
+                                                Consumer, C, OrderKey, QName),
                     #order_key_consumer{q_entry = QEntry, msg_count = 1}
             end;
         _ ->
-            rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer4"),
+            rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer5"),
             deliver_message_to_consumer(Message, IsDelivered, AckTag,
-                Consumer, C, QName),
+                                        Consumer, C, OrderKey, QName),
             #order_key_consumer{q_entry = QEntry, msg_count = 1}
     end,
     OrderKeyState1 = add_order_key_consumer(OrderKey, OrderKeyConsumer1, AckTag, OrderKeyState),
@@ -330,10 +355,10 @@ deliver_message_to_consumer(Message, IsDelivered, AckTag,
                                     acktags               = ChAckTags,
                                     unsent_message_count  = Count,
                                     limiter               = Limiter},
-                            QName) ->
+                            OrderKey, QName) ->
 
-    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer CTag=~s credit=~b ChAckTags=~b",
-                [CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1]),
+    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer end AckTag=~b OrderKey=~s CTag=~s credit=~b ChAckTags=~b",
+                    [AckTag, OrderKey, CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1]),
 
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
                           {QName, self(), AckTag, IsDelivered, Message}),
@@ -354,27 +379,25 @@ subtract_acks(ChPid, AckTags, State=#state{order_key_state = OrderKeyState}) ->
         not_found ->
             not_found;
         C = #cr{acktags = ChAckTags, limiter = Lim} ->
-
-            %%判断Order开关
             State1 = State#state{order_key_state = remove_order_key_acks(AckTags, OrderKeyState)},
-
             {CTagCounts, AckTags2} = subtract_acks(
                                        AckTags, [], maps:new(), ChAckTags),
             {Unblocked, Lim2} =
                 maps:fold(
-                  fun (CTag, Count, {UnblockedN, LimN}) ->
-                          {Unblocked1, LimN1} =
-                              rabbit_limiter:ack_from_queue(LimN, CTag, Count),
-                              rabbit_log:info("rabbit_queue_consumers:subtract_acks CTag=~s credit=~b",
-                                  [CTag, rabbit_limiter:get_credit(LimN, CTag)]),
-                          {UnblockedN orelse Unblocked1, LimN1}
-                  end, {false, Lim}, CTagCounts),
+                    fun (CTag, Count, {UnblockedN, LimN}) ->
+                        {Unblocked1, LimN1} = rabbit_limiter:ack_from_queue(LimN, CTag, Count),
+                        rabbit_log:info("rabbit_queue_consumers:subtract_acks CTag=~s credit=~b",
+                                        [CTag, rabbit_limiter:get_credit(LimN, CTag)]),
+                        {UnblockedN orelse Unblocked1, LimN1}
+                    end, {false, Lim}, CTagCounts),
             C2 = C#cr{acktags = AckTags2, limiter = Lim2},
             case Unblocked of
-                true  -> case unblock(C2, State1) of
-                             unchanged -> {unchanged, State1};
-                             {unblocked, State2} -> {unblocked, State2}
-                         end;
+                true  ->
+                    rabbit_log:info("rabbit_queue_consumers:subtract_acks unblock"),
+                    case unblock(C2, State1) of
+                         unchanged -> {unchanged, State1};
+                         {unblocked, State2} -> {unblocked, State2}
+                    end;
                 false -> update_ch_record(C2),
                     {unchanged, State1}
             end

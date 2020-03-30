@@ -258,7 +258,6 @@ force_send(L = #qstate{pid = Pid, state = State, credits = Credits},
     end.
 
 safe_call(Pid, Msg, ExitValue) ->
-%%    rabbit_log:info("rabbit_limiter:safe_call"),
     rabbit_misc:with_exit_handler(
       fun () -> ExitValue end,
       fun () -> gen_server2:call(Pid, Msg, infinity) end).
