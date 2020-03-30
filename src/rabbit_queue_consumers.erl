@@ -247,24 +247,6 @@ deliver_to_consumer(FetchFun, QEntry = {ChPid, Consumer}, QName, State) ->
                  end
     end.
 
-ensure_properties_decode(Message) ->
-    #basic_message{content = Content} = Message,
-    Content1 = rabbit_binary_parser:ensure_content_decoded(Content),
-    Message#basic_message{content = Content1}.
-
-get_headers(#basic_message{content = #content{properties = #'P_basic'{headers = Headers}}}) ->
-    case Headers of
-        undefined -> [];
-        H         -> H
-    end.
-
-get_order_key(Message) ->
-    Headers = get_headers(Message),
-    case lists:keyfind(<<"x-order-key">>, 1, Headers) of
-        false -> undefined;
-        {_Key, _Type, Value} -> Value
-    end.
-
 deliver_to_consumer(FetchFun,
                     Consumer = #consumer{ack_required = AckRequired, tag = CTag},
                     C, QEntry, QName,
@@ -692,3 +674,22 @@ use_avg(0, 0, Avg) ->
 use_avg(Active, Inactive, Avg) ->
     Time = Inactive + Active,
     rabbit_misc:moving_average(Time, ?USE_AVG_HALF_LIFE, Active / Time, Avg).
+
+
+ensure_properties_decode(Message) ->
+    #basic_message{content = Content} = Message,
+    Content1 = rabbit_binary_parser:ensure_content_decoded(Content),
+    Message#basic_message{content = Content1}.
+
+get_headers(#basic_message{content = #content{properties = #'P_basic'{headers = Headers}}}) ->
+    case Headers of
+        undefined -> [];
+        H         -> H
+    end.
+
+get_order_key(Message) ->
+    Headers = get_headers(Message),
+    case lists:keyfind(<<"x-order-key">>, 1, Headers) of
+        false -> undefined;
+        {_Key, _Type, Value} -> Value
+    end.
