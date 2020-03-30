@@ -256,7 +256,7 @@ deliver_to_consumer(FetchFun,
 %%    lists:foreach(fun ({Key, _Type, Value}) ->
 %%                        rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s, value=~s)", [Key, Value])
 %%                  end, Headers),
-    
+
     OrderKey = get_order_key(Message1),
 
     rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer start AckTag=~b OrderKey=~s CTag=~s "
@@ -308,7 +308,7 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                     case rabbit_limiter:force_send(Limiter1,
                                                     Consumer1#consumer.ack_required,
                                                     Consumer1#consumer.tag) of
-                        {suspend, Limiter2} ->
+                        {suspend, _Limiter2} ->
                             %%无法发送也没办法，只能通过Consumer发送
                             rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer2"),
                             deliver_message_to_consumer(Message, IsDelivered, AckTag,
