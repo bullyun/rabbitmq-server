@@ -314,7 +314,7 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer, C, QName),
                     #order_key_consumer{q_entry = QEntry, msg_count = MsgCount + 1};
-                UnsentMessageCount < 50 ->
+                UnsentMessageCount < 55 ->
                     {_, Limiter2} = rabbit_limiter:force_send(C1#cr.limiter,
                                                             Consumer1#consumer.ack_required,
                                                             Consumer1#consumer.tag),
@@ -351,7 +351,7 @@ deliver_message_to_consumer(Message, IsDelivered, AckTag,
                             QName) ->
 
     rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer CTag=~s credit=~b UnsentMessageCount=~b",
-        [CTag, rabbit_limiter:get_credit(Limiter, CTag), Count+1]),
+                [CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1, Count+1]),
 
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
                           {QName, self(), AckTag, IsDelivered, Message}),
