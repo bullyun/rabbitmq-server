@@ -889,7 +889,9 @@ delete(Q, IfUnused, IfEmpty, ActingUser) ->
     case wait_for_promoted_or_stopped(Q) of
         {promoted, #amqqueue{pid = QPid}} ->
             rabbit_log:info("delete promoted"),
-            delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]});
+            Ret = delegate:invoke(QPid, {gen_server2, call, [{delete, IfUnused, IfEmpty, ActingUser}, infinity]}),
+            rabbit_log:info("delete promoted2"),
+            Ret;
         {stopped, Q1} ->
             rabbit_log:info("delete stopped"),
             #resource{name = Name, virtual_host = Vhost} = Q1#amqqueue.name,

@@ -2212,6 +2212,7 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
     QueueName = rabbit_misc:r(VHostPath, queue, ActualNameBin),
     check_configure_permitted(QueueName, User),
     rabbit_core_metrics:queue_declared(QueueName),
+    rabbit_log:info("handle_method(queue.declare)"),
     case rabbit_amqqueue:with(
            QueueName,
            fun (Q) -> ok = rabbit_amqqueue:assert_equivalence(
