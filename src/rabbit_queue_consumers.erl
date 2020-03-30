@@ -301,9 +301,9 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
         {ok, #order_key_consumer{q_entry = QEntry1, msg_count = MsgCount}} ->
             {ChPid1, Consumer1} = QEntry1,
             C1 = lookup_ch(ChPid1),
-            #cr{unsent_message_count = UnsentMessageCount} = C1,
             #consumer{tag = CTag} = Consumer,
             #consumer{tag = CTag1} = Consumer1,
+            Credit1 = rabbit_limiter:get_credit(C1#cr.limiter, CTag1),
 
 %%            rabbit_log:info("rabbit_queue_consumers:deliver_message_order_to_consumer ChPid1=~s CTag=~s UnsentMessageCount=~b"
 %%                , [ChPid1, CTag1, UnsentMessageCount]),
@@ -314,7 +314,7 @@ deliver_message_order_to_consumer(Message, IsDelivered, AckTag,
                     deliver_message_to_consumer(Message, IsDelivered, AckTag,
                         Consumer, C, QName),
                     #order_key_consumer{q_entry = QEntry, msg_count = MsgCount + 1};
-                UnsentMessageCount < 60 ->
+                Credit1 > -50 ->
                     {_, Limiter2} = rabbit_limiter:force_send(C1#cr.limiter,
                                                             Consumer1#consumer.ack_required,
                                                             Consumer1#consumer.tag),
@@ -350,8 +350,8 @@ deliver_message_to_consumer(Message, IsDelivered, AckTag,
                                     limiter               = Limiter},
                             QName) ->
 
-    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer CTag=~s credit=~b ChAckTags=~b UnsentMessageCount=~b",
-                [CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1, Count+1]),
+    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer CTag=~s credit=~b ChAckTags=~b",
+                [CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1]),
 
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
                           {QName, self(), AckTag, IsDelivered, Message}),
@@ -449,8 +449,6 @@ resume_fun() ->
 
 notify_sent_fun(Credit) ->
     fun (C = #cr{unsent_message_count = Count}) ->
-        rabbit_log:info("rabbit_queue_consumers:notify_sent_fun UnsentMessageCount=~b Credit=~b",
-            [Count, Credit]),
         C#cr{unsent_message_count = Count - Credit}
     end.
 
