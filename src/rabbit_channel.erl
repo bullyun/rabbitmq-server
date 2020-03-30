@@ -2293,18 +2293,27 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
                    rabbit_amqqueue:check_exclusive_access(Q, ConnPid),
                    rabbit_amqqueue:delete(Q, IfUnused, IfEmpty, Username)
            end,
-           fun (not_found)            -> {ok, 0};
-               ({absent, Q, crashed}) -> rabbit_amqqueue:delete_crashed(Q, Username),
+           fun (not_found)            ->
+                   rabbit_log:info("handle_method(queue.delete)1"),
+                   {ok, 0};
+               ({absent, Q, crashed}) ->
+                   rabbit_log:info("handle_method(queue.delete)2"),
+                   rabbit_amqqueue:delete_crashed(Q, Username),
                                          {ok, 0};
-               ({absent, Q, stopped}) -> rabbit_amqqueue:delete_crashed(Q, Username),
+               ({absent, Q, stopped}) ->
+                   rabbit_log:info("handle_method(queue.delete)3"),
+                   rabbit_amqqueue:delete_crashed(Q, Username),
                                          {ok, 0};
-               ({absent, Q, Reason})  -> rabbit_misc:absent(Q, Reason)
+               ({absent, Q, Reason})  ->
+                   rabbit_log:info("handle_method(queue.delete)4"),
+                   rabbit_misc:absent(Q, Reason)
            end) of
         {error, in_use} ->
             precondition_failed("~s in use", [rabbit_misc:rs(QueueName)]);
         {error, not_empty} ->
             precondition_failed("~s not empty", [rabbit_misc:rs(QueueName)]);
         {ok, _Count} = OK ->
+            rabbit_log:info("handle_method(queue.delete)5"),
             OK
     end;
 handle_method(#'exchange.delete'{exchange  = ExchangeNameBin,

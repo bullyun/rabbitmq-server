@@ -1284,10 +1284,16 @@ handle_call({delete, IfUnused, IfEmpty, ActingUser}, _From,
     IsEmpty  = BQ:is_empty(BQS),
     IsUnused = is_unused(State),
     if
-        IfEmpty  and not(IsEmpty)  -> reply({error, not_empty}, State);
-        IfUnused and not(IsUnused) -> reply({error,    in_use}, State);
-        true                       -> stop({ok, BQ:len(BQS)},
-                                           State#q{status = {terminated_by, ActingUser}})
+        IfEmpty  and not(IsEmpty)  ->
+            rabbit_log:info("handle_call(delete)1"),
+            reply({error, not_empty}, State);
+        IfUnused and not(IsUnused) ->
+            rabbit_log:info("handle_call(delete)2"),
+            reply({error,    in_use}, State);
+        true                       ->
+            rabbit_log:info("handle_call(delete)3"),
+            stop({ok, BQ:len(BQS)},
+                State#q{status = {terminated_by, ActingUser}})
     end;
 
 handle_call(purge, _From, State = #q{backing_queue       = BQ,
