@@ -252,7 +252,7 @@ deliver_to_consumer(FetchFun,
     {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
     Message1 = ensure_properties_decode(Message),
 
-    Headers = get_headers(Message1),
+%%    Headers = get_headers(Message1),
 %%    lists:foreach(fun ({Key, _Type, Value}) ->
 %%                        rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s, value=~s)", [Key, Value])
 %%                  end, Headers),
