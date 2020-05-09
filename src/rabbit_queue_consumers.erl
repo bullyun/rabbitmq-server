@@ -259,18 +259,18 @@ deliver_to_consumer(FetchFun,
 
     OrderKey = get_order_key(Message1),
 
-    rabbit_log:info("************rabbit_queue_consumers:deliver_to_consumer start QName=~s AckTag=~b OrderKey=~s CTag=~s "
-        , [QName, AckTag, OrderKey, CTag]),
+%%    rabbit_log:info("************rabbit_queue_consumers:deliver_to_consumer start QName=~s AckTag=~b OrderKey=~s CTag=~s "
+%%        , [QName, AckTag, OrderKey, CTag]),
     CTag,
 
     State1 = case OrderKey of
         undefined ->
-            rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer"),
+%%            rabbit_log:info("to rabbit_queue_consumers:deliver_message_to_consumer"),
             deliver_message_to_consumer(Message1, IsDelivered, AckTag,
                                         Consumer, C, OrderKey, QName),
             State;
         _ ->
-            rabbit_log:info("to rabbit_queue_consumers:deliver_message_order_to_consumer"),
+%%            rabbit_log:info("to rabbit_queue_consumers:deliver_message_order_to_consumer"),
             deliver_message_order_to_consumer(Message1, IsDelivered, AckTag,
                                                 Consumer, C,
                                                 OrderKey, QEntry, QName, State)
@@ -358,8 +358,8 @@ deliver_message_to_consumer(Message, IsDelivered, AckTag,
                                     limiter               = Limiter},
                             OrderKey, QName) ->
 
-    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer end AckTag=~b OrderKey=~s CTag=~s credit=~b ChAckTags=~b",
-                    [AckTag, OrderKey, CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1]),
+    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer end QName=~s AckTag=~b OrderKey=~s CTag=~s credit=~b ChAckTags=~b",
+                    [QName, AckTag, OrderKey, CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1]),
     Limiter,OrderKey,
 
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
@@ -587,16 +587,16 @@ add_order_key_consumer(OrderKey, OrderKeyConsumer=#order_key_consumer{q_entry = 
         State = #order_key_state{order_key_consumers = OrderKeyConsumers, ack_order_keys = AckOrderKeys}) ->
 
     {_ChPid, #consumer{tag = CTag}} = QEntry,
-    rabbit_log:info("rabbit_queue_consumers:add_order_key_consumer OrderKey=~s CTag=~s AckTag=~b MsgCount=~b"
-                    , [OrderKey, CTag, AckTag, MsgCount]),
+%%    rabbit_log:info("rabbit_queue_consumers:add_order_key_consumer OrderKey=~s CTag=~s AckTag=~b MsgCount=~b"
+%%                    , [OrderKey, CTag, AckTag, MsgCount]),
     MsgCount,CTag,
     State1 = State#order_key_state{order_key_consumers = maps:put(OrderKey, OrderKeyConsumer, OrderKeyConsumers)},
     State2 = State1#order_key_state{ack_order_keys = maps:put(AckTag,
                                                         #ack_order_key{q_entry = QEntry, order_key = OrderKey},
                                                         AckOrderKeys)},
-    rabbit_log:info("rabbit_queue_consumers:add_order_key_consumer OrderKeyConsumers=~b AckOrderKeys=~b",
-                    [maps:size(State2#order_key_state.order_key_consumers),
-                        maps:size(State2#order_key_state.ack_order_keys)]),
+%%    rabbit_log:info("rabbit_queue_consumers:add_order_key_consumer OrderKeyConsumers=~b AckOrderKeys=~b",
+%%                    [maps:size(State2#order_key_state.order_key_consumers),
+%%                        maps:size(State2#order_key_state.ack_order_keys)]),
     State2.
 
 
@@ -613,13 +613,13 @@ remove_order_key_ack(AckTag,
                     MsgCount1 = MsgCount - 1,
                     if
                         MsgCount1 == 0 ->
-                            rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers:remove OrderKey=~s CTag=~s AckTag=~b",
-                                [OrderKey, CTag, AckTag]),
+%%                            rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers:remove OrderKey=~s CTag=~s AckTag=~b",
+%%                                [OrderKey, CTag, AckTag]),
                             CTag,
                             State#order_key_state{order_key_consumers = maps:remove(OrderKey, OrderKeyConsumers)};
                         true ->
-                            rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers:remove OrderKey=~s CTag=~s AckTag=~b MsgCount=~b",
-                                [OrderKey, CTag, AckTag, MsgCount1]),
+%%                            rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers:remove OrderKey=~s CTag=~s AckTag=~b MsgCount=~b",
+%%                                [OrderKey, CTag, AckTag, MsgCount1]),
                             State#order_key_state{order_key_consumers = maps:put(OrderKey,
                                                 OrderKeyConsumer#order_key_consumer{msg_count = MsgCount1},
                                                 OrderKeyConsumers)}
@@ -629,9 +629,9 @@ remove_order_key_ack(AckTag,
             State1#order_key_state{ack_order_keys = maps:remove(AckTag, AckOrderKeys)};
         _ -> State
     end,
-    rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers=~b AckOrderKeys=~b",
-                    [maps:size(State2#order_key_state.order_key_consumers),
-                        maps:size(State2#order_key_state.ack_order_keys)]),
+%%    rabbit_log:info("rabbit_queue_consumers:remove_order_key_ack OrderKeyConsumers=~b AckOrderKeys=~b",
+%%                    [maps:size(State2#order_key_state.order_key_consumers),
+%%                        maps:size(State2#order_key_state.ack_order_keys)]),
     State2.
 
 
@@ -650,9 +650,9 @@ remove_order_key_consumer(ChPid, CTag,
                                     (ChPid1 /= ChPid) or (CTag1 /= CTag)
                                 end, AckOrderKeys),
     State2 = State#order_key_state{order_key_consumers = OrderKeyConsumers1, ack_order_keys = AckOrderKeys1},
-    rabbit_log:info("rabbit_queue_consumers:remove_order_key_consumers OrderKeyConsumers=~b AckOrderKeys=~b CTag=~s",
-        [maps:size(State2#order_key_state.order_key_consumers),
-            maps:size(State2#order_key_state.ack_order_keys), CTag]),
+%%    rabbit_log:info("rabbit_queue_consumers:remove_order_key_consumers OrderKeyConsumers=~b AckOrderKeys=~b CTag=~s",
+%%        [maps:size(State2#order_key_state.order_key_consumers),
+%%            maps:size(State2#order_key_state.ack_order_keys), CTag]),
     State2.
 
 remove_order_key_consumers(ChPid,
@@ -664,9 +664,9 @@ remove_order_key_consumers(ChPid,
                                     (ChPid1 /= ChPid)
                                 end, AckOrderKeys),
     State2 = State#order_key_state{order_key_consumers = OrderKeyConsumers1, ack_order_keys = AckOrderKeys1},
-    rabbit_log:info("rabbit_queue_consumers:remove_order_key_consumers2 OrderKeyConsumers=~b AckOrderKeys=~b",
-        [maps:size(State2#order_key_state.order_key_consumers),
-            maps:size(State2#order_key_state.ack_order_keys)]),
+%%    rabbit_log:info("rabbit_queue_consumers:remove_order_key_consumers2 OrderKeyConsumers=~b AckOrderKeys=~b",
+%%        [maps:size(State2#order_key_state.order_key_consumers),
+%%            maps:size(State2#order_key_state.ack_order_keys)]),
     State2.
 
 %%remove_all_order_key_consumers(State = #order_key_state{order_key_consumers = OrderKeyConsumers,
