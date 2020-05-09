@@ -252,7 +252,7 @@ deliver_to_consumer(FetchFun,
     {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
     Message1 = ensure_properties_decode(Message),
 
-%%    Headers = get_headers(Message1),
+    Headers = get_headers(Message1),
 %%    lists:foreach(fun ({Key, _Type, Value}) ->
 %%                        rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer(key=~s, value=~s)", [Key, Value])
 %%                  end, Headers),
@@ -718,9 +718,9 @@ get_order_key(Message) ->
     Headers = get_headers(Message),
     case lists:keyfind(<<"x-order-key">>, 1, Headers) of
         false -> undefined;
-        {_Key, _Type, Value} ->
-            case is_integer(Value) of
-                true -> integer_to_list(Value);
-                false -> Value
-            end
+        {_Key, _Type, Value} -> Value
+%%            case is_integer(Value) of
+%%                true -> integer_to_list(Value);
+%%                false -> Value
+%%            end
     end.
