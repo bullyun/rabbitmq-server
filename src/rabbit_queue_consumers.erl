@@ -259,8 +259,8 @@ deliver_to_consumer(FetchFun,
 
     OrderKey = get_order_key(Message1),
 
-    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer start AckTag=~b OrderKey=~s CTag=~s "
-        , [AckTag, OrderKey, CTag]),
+    rabbit_log:info("************rabbit_queue_consumers:deliver_to_consumer start QName=~s AckTag=~b OrderKey=~s CTag=~s "
+        , [QName, AckTag, OrderKey, CTag]),
     CTag,
 
     State1 = case OrderKey of
