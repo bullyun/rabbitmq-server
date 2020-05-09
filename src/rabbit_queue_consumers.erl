@@ -259,8 +259,8 @@ deliver_to_consumer(FetchFun,
 
     OrderKey = get_order_key(Message1),
 
-%%    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer start AckTag=~b OrderKey=~s CTag=~s "
-%%        , [AckTag, OrderKey, CTag]),
+    rabbit_log:info("rabbit_queue_consumers:deliver_to_consumer start AckTag=~b OrderKey=~s CTag=~s "
+        , [AckTag, OrderKey, CTag]),
     CTag,
 
     State1 = case OrderKey of
@@ -664,9 +664,9 @@ remove_order_key_consumers(ChPid,
                                     (ChPid1 /= ChPid)
                                 end, AckOrderKeys),
     State2 = State#order_key_state{order_key_consumers = OrderKeyConsumers1, ack_order_keys = AckOrderKeys1},
-%%    rabbit_log:info("rabbit_queue_consumers:remove_order_key_consumers2 OrderKeyConsumers=~b AckOrderKeys=~b",
-%%        [maps:size(State2#order_key_state.order_key_consumers),
-%%            maps:size(State2#order_key_state.ack_order_keys)]),
+    rabbit_log:info("rabbit_queue_consumers:remove_order_key_consumers2 OrderKeyConsumers=~b AckOrderKeys=~b",
+        [maps:size(State2#order_key_state.order_key_consumers),
+            maps:size(State2#order_key_state.ack_order_keys)]),
     State2.
 
 %%remove_all_order_key_consumers(State = #order_key_state{order_key_consumers = OrderKeyConsumers,
