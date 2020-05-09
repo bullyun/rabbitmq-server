@@ -358,8 +358,8 @@ deliver_message_to_consumer(Message, IsDelivered, AckTag,
                                     limiter               = Limiter},
                             OrderKey, QName) ->
 
-    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer end QName=~s AckTag=~b OrderKey=~s CTag=~s credit=~b ChAckTags=~b",
-                    [QName, AckTag, OrderKey, CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1]),
+    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer end.Message=~p QName=~p AckTag=~b OrderKey=~s CTag=~s credit=~b ChAckTags=~b",
+                    [Message, QName, AckTag, OrderKey, CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1]),
     Limiter,OrderKey,
 
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
