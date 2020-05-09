@@ -718,5 +718,9 @@ get_order_key(Message) ->
     Headers = get_headers(Message),
     case lists:keyfind(<<"x-order-key">>, 1, Headers) of
         false -> undefined;
-        {_Key, _Type, Value} -> Value
+        {_Key, _Type, Value} ->
+            case is_integer(Value) of
+                true -> integer_to_list(Value);
+                false -> Value
+            end
     end.
