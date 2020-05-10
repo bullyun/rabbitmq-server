@@ -358,8 +358,8 @@ deliver_message_to_consumer(Message, IsDelivered, AckTag,
                                     limiter               = Limiter},
                             OrderKey, QName) ->
 
-    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer end.Message=~p QName=~p AckTag=~b OrderKey=~s CTag=~s credit=~b ChAckTags=~b",
-                    [Message, QName, AckTag, OrderKey, CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1]),
+%%    rabbit_log:info("rabbit_queue_consumers:deliver_message_to_consumer end.Message=~p QName=~p AckTag=~b OrderKey=~s CTag=~s credit=~b ChAckTags=~b",
+%%                    [Message, QName, AckTag, OrderKey, CTag, rabbit_limiter:get_credit(Limiter, CTag), queue:len(ChAckTags)+1]),
     Limiter,OrderKey,
 
     rabbit_channel:deliver(ChPid, CTag, AckRequired,
@@ -718,9 +718,10 @@ get_order_key(Message) ->
     Headers = get_headers(Message),
     case lists:keyfind(<<"x-order-key">>, 1, Headers) of
         false -> undefined;
-        {_Key, _Type, Value} -> Value
-%%            case is_integer(Value) of
-%%                true -> integer_to_list(Value);
-%%                false -> Value
-%%            end
+        {_Key, _Type, Value} ->
+%%            Value
+            case is_integer(Value) of
+                true -> integer_to_list(Value);
+                false -> Value
+            end
     end.
