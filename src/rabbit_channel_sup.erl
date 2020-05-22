@@ -55,7 +55,6 @@
 
 start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
             VHost, Capabilities, Collector}) ->
-    rabbit_log:info("tcp ", [Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User, VHost, Capabilities, Collector]),
     {ok, SupPid} = supervisor2:start_link(
                      ?MODULE, {tcp, Sock, Channel, FrameMax,
                                ReaderPid, Protocol, {ConnName, Channel}}),
@@ -73,7 +72,6 @@ start_link({tcp, Sock, Channel, FrameMax, ReaderPid, ConnName, Protocol, User,
     {ok, SupPid, {ChannelPid, AState}};
 start_link({direct, Channel, ClientChannelPid, ConnPid, ConnName, Protocol,
             User, VHost, Capabilities, Collector, AmqpParams}) ->
-    rabbit_log:info("direct ", [Channel, ClientChannelPid, ConnPid, ConnName, Protocol, User, VHost, Capabilities, Collector]),
     {ok, SupPid} = supervisor2:start_link(
                      ?MODULE, {direct, {ConnName, Channel}}),
     [LimiterPid] = supervisor2:find_child(SupPid, limiter),
